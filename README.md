@@ -1,3 +1,3 @@
 # RBB
 
-Placeholder for the tools we develop during RBB work.
+Placeholder for the tools, libraries we develop during RBB work.
