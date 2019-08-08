@@ -1,92 +1,85 @@
 #!/bin/bash
 
 #set -x
-DEFAULT_NODE_PATH=/usr/bin/
-LTS11_NODE_PATH=/home/upawar/node-v11.13.0-linux-x64/bin
-MASTER_NODE_PATH=/home/upawar/projects/node/out/Release
 
-NODE_UT=$DEFAULT_NODE_PATH
-NODE_UT=$MASTER_NODE_PATH
-NODE_UT=$LTS11_NODE_PATH
+SUPPORTED_METRICS="itlb_stalls,mpki"
 
-export PATH=$NODE_UT:$PATH
+process_id=$$
 
-which node
-node -v
-APP_NAME="ghost_app"
+function usage() {
+  echo "usage: $0 [-p app_pid] [-m metric_name] [-t time] [-h]"
+  echo "app_id : application process id to profile"
+  echo "metric_name : itlb_stalls | mpki, etc."
+  echo "time : Time in seconds. Default 10s."
+  exit
+}
 
-NCLUSTERS=1 #1, 2, 4, 8
-NPROCS=1    #1, 4, 8, 14
+if [ $# -eq 0 ]; then
+    usage
+fi
 
-PERF_DATA_COLLECTION_TIME=10 #perf collection time in seconds
+while [ "$1" != "" ]; do
+  case $1 in
+    -p | --processid) shift
+      app_process_id=$1
+      ;;
+    -m | --metricname) shift
+      metric_name=$1
+      ;;
+    -t | --processid) shift
+      collect_time=$1
+      ;;
+    *) usage
+      exit 1
+  esac
+  shift
+done
+
+if [ "x${app_process_id}" == "x" ]; then
+  echo "ERROR: Please specify the application process id to collect the perf data. Exiting."
+  exit
+fi
+
+# Check if process is still running"
+realpid=`/bin/ps ax|grep ${app_process_id}|grep -v grep | grep -v bash`
+if [ "x${realpid}" == "x" ]; then
+  echo "ERROR: Application with PID ${app_process_id} is not found"
+  exit
+fi
+
+if [ "x${metric_name}" == "x" ]; then
+  echo "WARNING: ITLB_STALLS as a default metric will be derived"
+  metric_name="itlb_stalls"
+fi
+
+if [ "x${collect_time}" == "x" ]; then
+  echo "WARNING: Default perf data collection time is 10 seconds"
+  collect_time=10
+fi
+
+
+PERF_DATA_COLLECTION_TIME=$collect_time #perf collection time in seconds
 
 #Individual sets of pmus
 #ITLB_STALLS
 PERF_PMUS="cycles,icache_64b.iftag_stall"
 
 #L2_demand_code_MPI
-PERF_PMUS="instructions,l2_rqsts.code_rd_miss"
+#PERF_PMUS="instructions,l2_rqsts.code_rd_miss"
 
 #One big set of pmus
-PERF_PMUS="cycles,icache_64b.iftag_stall,instructions,l2_rqsts.code_rd_miss,l2_rqsts.all_code_rd"
+#PERF_PMUS="cycles,icache_64b.iftag_stall,instructions,l2_rqsts.code_rd_miss,l2_rqsts.all_code_rd"
 
-PROCESS_ID=0 #Initialization
-PERF_DATA_FILE="perf_stat.txt"
-
-# Start the ghost.js application ....
-function start_application() {
-  echo
-  echo "--------------------------------------------------"
-  echo "`date`: Starting the Ghost.js server"
-  echo "--------------------------------------------------"
-
-  NODE_ENV=production pm2 start --name ${APP_NAME} -i ${NPROCS} index.js 
-
-  sleep 5
-  echo "--------------------------------------------------"
-  echo "`date`: Get node application process id"
-  PROCESS_ID=`pm2 prettylist|grep -v _pid | grep pid|cut -d':' -f2|cut -d ',' -f1`
-  echo "process id is ${PROCESS_ID}"
-  echo 
-}
-
-function warm_up_phase() {
-  echo 
-  echo "--------------------------------------------------"
-  echo "`date`: Starting ab client to warm up the application"
-  echo "Warmup:----------------------------------------------"
-  ab -n 10000 -c 50  http://127.0.0.1:8013/
-  echo 
-  sleep 5
-}
-
-function get_rps_phase() {
-  echo 
-  echo "Get RPS:---------------------------------------------"
-  ab -n 20000 -c 50  http://127.0.0.1:8013/
-  echo 
-}
-
-function start_client_for_perf_data() {
-  echo 
-  echo "--------------------------------------------------"
-  echo "`date`: Starting ab client to collect perf data"
-  echo "--------------------------------------------------"
-  ab -n 100000 -c 50  http://127.0.0.1:8013/ &
-  sleep 15
-  echo 
-}
+PERF_DATA_FILE="/tmp/process_id_perf_stat.txt"
 
 function collect_perf_data() {
   echo 
 
-  start_client_for_perf_data
-
   echo "--------------------------------------------------"
-  echo "`date`:Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds process ${PROCESS_ID}"
+  echo "`date`:Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds process ${app_process_id}"
   echo "`date`:perf stat -e ${PERF_PMUS}"
   echo "--------------------------------------------------"
-  perf stat -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $PROCESS_ID -a sleep ${PERF_DATA_COLLECTION_TIME}
+  perf stat -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $app_process_id -a sleep ${PERF_DATA_COLLECTION_TIME}
   echo 
 }
 
@@ -199,43 +192,47 @@ function display_perf_data()
   echo
 }
 
-function app_specific_phases() {
-  warm_up_phase
-  #get_rps_phase
+function check_if_metric_supported() {
+  local OLDIFS=$IFS
+  IFS=","; read -ra METRICS <<< "${SUPPORTED_METRICS}"
+
+  local metric_not_found=0
+  for i in "${METRICS[@]}"; do
+    if [ "${i}" != "${metric_name}" ]; then
+      metric_not_found=1
+    else
+      metric_not_found=0
+      break
+    fi
+  done
+  IFS=$OLDIFS
+  if [[ ${metric_not_found} == 1 ]]; then
+    echo "Error: ${metric_name} is not supported. See supported metric."
+    echo
+    echo "--> $SUPPORTED_METRICS"
+    echo
+    echo
+    echo "Aborting ...."
+    exit 1
+  fi
+  echo "Metric ${metric_name} is supported"
 }
 
-function stop_application() {
-  echo 
-  pm2 stop ${APP_NAME}
-  pm2 delete ${APP_NAME}
-  echo 
-}
-
-function cleanup() {
-  stop_application
-}
-
-# Reset the application state
-cleanup
-
-# Function to start an application
-#start_application
-
-# This is optional
-#app_specific_phases #This includes warmup phase for Ghost and measurement phass.
+# Check if metric asked is supported
+check_if_metric_supported
 
 # Get perf data
-#collect_perf_data
-
-# Reset the application state (stop or kill all processes)
-cleanup
+collect_perf_data
 
 # Calculate the perf metric, we can add more as needed
 display_perf_data
 
-get_itlb_stall_metric
+if [ "${metric_name}" == "itlb_stalls" ]; then
+  get_itlb_stall_metric
+fi
+
 #get_l2_demand_code_MPI_metric
-get_l1_code_read_MPI_metric
+#get_l1_code_read_MPI_metric
 
 exit
 
