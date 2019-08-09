@@ -10,13 +10,16 @@ metric_entries=1
 pmu_array=(cycles instructions)
 pmu_entries=2
 
+metric_name="itlb_stalls"
+input_metrics=()
+input_metric_idx=0
+
 verbose_mode=0
 debug_mode=0
 collect_time=10
 perf_mode="stat"
 scale=10
 profile_mode="one"
-metric_name="itlb_stalls"
 PERF_PMUS=""
 
 #####################################################################
@@ -26,17 +29,17 @@ function print_metric_array() {
   if [ $debug_mode -eq 1 ]; then
     for item in ${metric_array[*]}
     do
-     printf ".....%s\n" $item
+      printf ".....%s\n" $item
     done
   fi
 }
 
-
 function usage() {
-  echo "usage: $0 [-p app_pid | -a] [-m metric_name] [-t time] [-r] [-v] [-h]"
+  echo "usage: $0 [-p app_pid | -a] [-m metric1,metric2,...] [-t time] [-r] [-v] [-h]"
   echo "-a : Profile whole system"
   echo "-p app_id : application process id to profile"
-  echo "-m metric_name : Use one of the following metric"
+  echo "-m metrics : Use comma separator to specify one or many of the"
+  echo "             following metrics."
   debug_mode=1
   print_metric_array
   debug_mode=0
@@ -49,7 +52,7 @@ function usage() {
   exit
 }
 
-# METRIC array ----
+# Build supported METRIC array ----
 function add_to_metric_array() {
   local found=0
 
@@ -66,7 +69,6 @@ function add_to_metric_array() {
     metric_array[metric_entries]=$1
     metric_entries=`expr $metric_entries + 1`
   fi
-
 }
 
 function init_metric_array() {
@@ -83,7 +85,6 @@ function init_metric_array() {
 
   # Debug mode print
   print_metric_array
-
 }
 
 # Build array of supported metrics
@@ -138,6 +139,74 @@ fi
 PERF_DATA_COLLECTION_TIME=$collect_time #perf collection time in seconds
 PERF_DATA_FILE="/tmp/measure_${process_id}_perf_stat.txt"
 
+# Build input metric array
+function print_input_metric_array() {
+  if [ $debug_mode -eq 1 ]; then
+    for item in ${input_metrics[*]}
+    do
+      printf "   %s\n" $item
+    done
+  fi
+}
+
+function add_to_input_metric_array() {
+  local found=0
+
+  #Check if the metric is already in the array
+  for item in ${input_metrics[*]}
+  do
+    if [ "$item" == "$1" ]; then
+      found=1
+      break
+    fi
+  done
+
+  if [ $found -eq 0 ]; then
+    input_metrics[input_metric_idx]=$1
+    input_metric_idx=`expr $input_metric_idx + 1`
+  fi
+}
+
+function add_if_valid_metric() {
+  local found=0
+  local input_metric="$1"
+  for item in ${metric_array[*]}
+  do
+    if [ "$item" == "$input_metric" ]; then
+      found=1
+      add_to_input_metric_array "$input_metric"
+      break
+    fi
+  done
+  if [ $found -eq 0 ]; then
+    echo "Warning: Ignoring invalid metric: $input_metric."
+  fi
+}
+
+function build_input_metric_array() {
+
+  if [ $debug_mode -eq 1 ]; then
+    echo "Before build input metric array"
+    echo "Array length: ${#input_metrics[@]}"
+    print_input_metric_array
+  fi
+
+  local OLDIFS=$IFS
+  IFS=","; read -ra local_metric <<< "${metric_name}"
+
+  for i in "${local_metric[@]}"
+  do
+    add_if_valid_metric "$i"
+  done
+  IFS=$OLDIFS
+
+  if [ $debug_mode -eq 1 ]; then
+    echo "After build input metric array"
+    echo "Array length: ${#input_metrics[@]}"
+    print_input_metric_array
+  fi
+}
+
 # PMU array ----
 function print_perf_pmu_array() {
   if [ $debug_mode -eq 1 ]; then
@@ -178,47 +247,29 @@ function rebuild_perf_pmu_args() {
 }
 
 function init_perf_pmus() {
-  echo "Initializing for metric: $metric_name"
-
-  init_func="init_${metric_name}"
-  
-  local specific_pmus=`${init_func}`
- 
-  local OLDIFS=$IFS
-  IFS=","; read -ra local_pmus <<< "${specific_pmus}"
-
-  for i in "${local_pmus[@]}"
+  for item in ${input_metrics[*]}
   do
-    add_to_pmu_array "$i"
+    echo "Initializing for metric: $item"
+
+    init_func="init_${item}"
+  
+    local specific_pmus=`${init_func}`
+ 
+    local OLDIFS=$IFS
+    IFS=","; read -ra local_pmus <<< "${specific_pmus}"
+
+    for i in "${local_pmus[@]}"
+    do
+      add_to_pmu_array "$i"
+    done
+    IFS=$OLDIFS
   done
-  IFS=$OLDIFS
 
   # Debug mode print
   print_perf_pmu_array
 
   # Rebuild PMU list to pass to perf command
   rebuild_perf_pmu_args
-}
-
-function check_if_metric_supported() {
-  local metric_not_found=0
-  for item in ${metric_array[*]}
-  do
-    if [ "${item}" != "${metric_name}" ]; then
-      metric_not_found=1
-    else
-      metric_not_found=0
-      break
-    fi
-  done
-
-  if [[ ${metric_not_found} == 1 ]]; then
-    echo "Error: Unsupported metric ${metric_name}. See usage."
-    echo
-    usage
-    echo "Aborting ...."
-    exit 1
-  fi
 }
 
 function collect_perf_data() {
@@ -260,8 +311,15 @@ function display_perf_data()
   echo
 }
 
+# Build valid input metric array
+build_input_metric_array
+if [ ${#input_metrics[@]} -le 0 ]; then
+  echo "Error: No valid input metric provided. Exiting."
+  exit
+fi
+
 # Check if metric asked is supported
-check_if_metric_supported
+#check_if_metric_supported
 
 # Initialize the PMUS
 init_perf_pmus
@@ -273,8 +331,13 @@ if [ "${perf_mode}"  == "stat" ]; then
   #Display perf stat data
   display_perf_data
 
-  calc_func="calc_${metric_name}"
-  ${calc_func} "${PERF_DATA_FILE}"
+  for item in ${input_metrics[*]}
+  do
+    echo "Calculating metric for : $item"
+
+    calc_func="calc_${item}"
+    ${calc_func} "${PERF_DATA_FILE}"
+  done
 else
   echo "Perf report: perf report --sort=dso,comm -i $PERF_DATA_FILE"
   perf report --sort=dso,comm -i $PERF_DATA_FILE
