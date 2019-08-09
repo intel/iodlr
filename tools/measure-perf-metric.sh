@@ -333,10 +333,12 @@ if [ "${perf_mode}"  == "stat" ]; then
 
   for item in ${input_metrics[*]}
   do
-    echo "Calculating metric for : $item"
+    echo "Calculating metric for: $item"
 
     calc_func="calc_${item}"
     ${calc_func} "${PERF_DATA_FILE}"
+
+    echo
   done
 else
   echo "Perf report: perf report --sort=dso,comm -i $PERF_DATA_FILE"
