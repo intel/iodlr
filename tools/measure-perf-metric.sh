@@ -49,6 +49,15 @@ function usage() {
   echo "-v : Verbose mode"
   echo "-d : Debug mode"
   echo "-h : Help message."
+  echo "examples:"
+  echo "  1) Single metric with verbose output:"
+  echo "    $ measure-perf-metric.sh -p 2345 -t 30 -m itlb_stalls -v"
+  echo
+  echo "  2) Multiple metrics:"
+  echo "    $ measure-perf-metric.sh -p 2345 -t 30 -m itlb_stalls,itlb_mpki"
+  echo
+  echo "  3) Whole system collection:"
+  echo "    $ measure-perf-metric.sh -a -t 30 -m itlb_stalls"
   exit
 }
 
