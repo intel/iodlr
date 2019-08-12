@@ -354,7 +354,6 @@ function collect_perf_data() {
      exit
     fi
   fi
-  exit
   echo 
 }
 
