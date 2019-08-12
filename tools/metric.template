@@ -26,11 +26,8 @@
 SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
-function init_metric_template() {
-  #Specify an arrau with counter needed for this metric" 
-  #See below example
-
-  local local_pmu_array=(instructions cycles)
+function init_somename() {
+  local local_pmu_array=(pmu1 pmu2)
   local local_pmus
   for item in ${local_pmu_array[*]}
   do
@@ -43,25 +40,26 @@ function init_metric_template() {
   echo $local_pmus
 }
 
-function calc_metric_template() {
+function calc_somename() {
   local perf_data_file="$1"
+  local metric_name="metric_<somename>"
   echo
   echo "================================================="
-  echo "Final metric name to display"
+  echo "Final ${metric_name}"
   echo "--------------------------------------------------"
-  echo "FORMULA: metric_name = formula for e.g. 100*(a/b)"
-  echo "         where, a=pmu1"
-  echo "                b=pmu2"
+  echo "FORMULA: ${metric_name} = 100*(a/b)"
+  echo "         where, a=pmu1 name"
+  echo "                b=pmu2 name"
   echo "================================================="
 
   local a=`return_pmu_value "<pmu1 name>" $perf_data_file `
   local b=`return_pmu_value "<pmu2 name>" $perf_data_file`
 
   if [ $a == -1 -o $b == -1 ]; then
-    echo "ERROR: metric_name can't be derived. Missing pmus"
+    echo "ERROR: ${metric_name} can't be derived. Missing pmus"
   else
-    local metric=`echo "scale=$scale;100*(${a}/${b})"| bc -l`
-    echo "metric_name=${metric}"
+    local metric=`echo "scale=$bc_scale;100*(${a}/${b})"| bc -l`
+    echo "${metric_name}=${metric}"
   fi
   echo
 }
