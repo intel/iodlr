@@ -27,21 +27,29 @@ SCRIPTS_DIR=`dirname $0`
 
 process_id=$$
 
-metric_array=(itlb_stalls)
+default_metric_name="itlb_stalls"
+default_pmu_array=(cycles instructions)
+default_perf_mode="stat"
+default_collect_time=10
+
+#####################################################################
+# No change require below this line
+#####################################################################
+collect_time=$default_collect_time
+perf_mode=$default_perf_mode
+
+metric_array=($default_metric_name)
 metric_entries=1
 
-pmu_array=(cycles instructions)
+pmu_array=$default_pmu_array
 pmu_entries=2
 
-metric_name="itlb_stalls"
+metric_name=$default_metric_name
 input_metrics=()
 input_metric_idx=0
 
 verbose_mode=0
 debug_mode=0
-collect_time=10
-perf_mode="stat"
-scale=10
 profile_mode="one"
 PERF_PMUS=""
 
@@ -50,29 +58,38 @@ PERF_PMUS=""
 #####################################################################
 function print_metric_array() {
   if [ $debug_mode -eq 1 ]; then
+    local idx=0
     for item in ${metric_array[*]}
     do
-      printf ".....%s\n" $item
+      local mod_item=$item
+      if [ "${default_metric_name}" == "$item" ]; then
+        mod_item="$item [Default]"
+      fi
+      echo "    $idx) $mod_item"
+      idx=`expr $idx + 1`
     done
   fi
 }
 
 function usage() {
-  echo "usage: $0 [-p app_pid | -a] [-m metric1,metric2,...] [-t time] [-r] [-v] [-h]"
-  echo "-a : Profile whole system"
-  echo "-p app_id : application process id to profile"
-  echo "-m metrics : Use comma separator to specify one or many of the"
-  echo "             following metrics."
+  local pname=`basename $0`
+  echo "Usage:"
+  echo "$pname [-p pid | -a] [-m metric1,metric2,...] [-t time] [-r] [-v] [-d] [-h]"
+  echo
+  echo "  -a : Profile whole system"
+  echo "  -p pid : application process id to profile"
+  echo "  -m metrics : Use comma separator to specify one or many of the"
+  echo "             following metrics"
   debug_mode=1
   print_metric_array
   debug_mode=0
-  echo "     Default metric is itlb_stalls."
-  echo "-t time : time in seconds. Default 10s."
-  echo "-r : Perf runs in record mode. Default is perf stat mode"
-  echo "-v : Verbose mode"
-  echo "-d : Debug mode"
-  echo "-h : Help message."
-  echo "examples:"
+  echo "  -t time : time in seconds. Default ${default_collect_time}s"
+  echo "  -r : Perf runs in record mode. Default is \"$default_perf_mode\" mode"
+  echo "  -v : Verbose mode"
+  echo "  -d : Debug mode"
+  echo "  -h : Help message"
+  echo
+  echo "  Examples:"
   echo "  1) Single metric with verbose output:"
   echo "    $ measure-perf-metric.sh -p 2345 -t 30 -m itlb_stalls -v"
   echo
@@ -104,7 +121,7 @@ function add_to_metric_array() {
 }
 
 function init_metric_array() {
-  for i in `ls $SCRIPTS_DIR/init_*`
+  for i in `ls $SCRIPTS_DIR/metric_*`
   do
     local metric=`basename $i|cut -d'_' -f2- | cut -d'.' -f1`
     source ${i} > /dev/null 2>&1
@@ -211,7 +228,8 @@ function add_if_valid_metric() {
     fi
   done
   if [ $found -eq 0 ]; then
-    echo "Warning: Ignoring invalid metric: $input_metric."
+    echo
+    echo "  Warning: Ignoring invalid metric: $input_metric."
   fi
 }
 
@@ -311,11 +329,16 @@ function collect_perf_data() {
   echo "Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds"
   echo "perf ${perf_mode} -e ${PERF_PMUS}"
 
+  local perf_ret=0
   if [ "${profile_mode}" == "system" ]; then
     echo "--------------------------------------------------"
     echo "Profiling whole system"
     echo "--------------------------------------------------"
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -a sleep ${PERF_DATA_COLLECTION_TIME}
+    if [ $? != 0 ]; then
+     echo "Perf -a failed. Exiting"
+     exit
+    fi
   else
     realpid=`/bin/ps ax|grep ${app_process_id}|grep -v grep | grep -v bash`
     if [ "x${realpid}" == "x" ]; then
@@ -326,7 +349,12 @@ function collect_perf_data() {
     echo "Profile application with process id: $app_process_id"
     echo "--------------------------------------------------"
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $app_process_id sleep ${PERF_DATA_COLLECTION_TIME}
+    if [ $? != 0 ]; then
+     echo "Perf -p $app_process_id failed. Exiting"
+     exit
+    fi
   fi
+  exit
   echo 
 }
 
