@@ -23,58 +23,45 @@
 //
 // SPDX-License-Identifier: MIT
 
-bc_scale=10
+SCRIPTS_DIR=`dirname $0`
+source ${SCRIPTS_DIR}/utils.sh
 
-function return_pmu_value() {
-  local pmu="$1"
-  local perf_data_file="$2"
-  if [ "x${pmu}" != "x" ]; then
-    local myresult=`grep "\<${1}\>" $perf_data_file | awk '{print $1}' | tr -d '[:space:][,]'`
-    echo "$myresult"
-  else
-    echo "WARNING: No pmu string specified"
-    echo -1
-  fi
-}
+function init_metric_template() {
+  #Specify an arrau with counter needed for this metric" 
+  #See below example
 
-function rebuild_metric_args() {
-  for item in ${metric_array[*]}
+  local local_pmu_array=(instructions cycles)
+  local local_pmus
+  for item in ${local_pmu_array[*]}
   do
-    if [ "x${SUPPORTED_METRICS}" == "x" ]; then
-      SUPPORTED_METRICS="$item"
+    if [ "x${local_pmus}" == "x" ]; then
+      local_pmus="$item"
     else
-      SUPPORTED_METRICS="$SUPPORTED_METRICS,$item"
+      local_pmus="$local_pmus,$item"
     fi
   done
+  echo $local_pmus
 }
 
+function calc_metric_template() {
+  local perf_data_file="$1"
+  echo
+  echo "================================================="
+  echo "Final metric name to display"
+  echo "--------------------------------------------------"
+  echo "FORMULA: metric_name = formula for e.g. 100*(a/b)"
+  echo "         where, a=pmu1"
+  echo "                b=pmu2"
+  echo "================================================="
 
-function check_if_pmu_exists() {
-  local perf_pmus="$1"
-  local perf_data_file="$2"
+  local a=`return_pmu_value "<pmu1 name>" $perf_data_file `
+  local b=`return_pmu_value "<pmu2 name>" $perf_data_file`
 
-  local OLDIFS=$IFS
-  IFS=","; read -ra PMUS <<< "${perf_pmus}"
-
-  local pmu_not_found=0
-  for i in "${PMUS[@]}"; do
-    pmu_value=`grep ${i} $perf_data_file |awk '{print $1}'| tr -d '[:space:][,]'`
-    if [[ "x${pmu_value}" == "x" ]]; then
-      echo "PMU ($i) not found with valid value"
-      pmu_not_found=1
-    else
-      echo "PMU_VALUE: $pmu_value"
-    fi
-  done
-  unset IFS
-
-  if [[ ${pmu_not_found} == 1 ]]; then
-    echo "Error: Missing required one or more PMUs ($perf_pmus)"
-    echo "Here is the perf output data"
-    echo
-    cat $perf_data_file
-    echo
-    echo "Ignoring ...."
-    echo -1
+  if [ $a == -1 -o $b == -1 ]; then
+    echo "ERROR: metric_name can't be derived. Missing pmus"
+  else
+    local metric=`echo "scale=$scale;100*(${a}/${b})"| bc -l`
+    echo "metric_name=${metric}"
   fi
+  echo
 }
