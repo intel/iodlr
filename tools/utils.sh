@@ -30,7 +30,12 @@ function return_pmu_value() {
   local perf_data_file="$2"
   if [ "x${pmu}" != "x" ]; then
     local myresult=`grep "\<${1}\>" $perf_data_file | awk '{print $1}' | tr -d '[:space:][,]'`
-    echo "$myresult"
+    re='^[0-9]+$'
+    if ! [[ $myresult =~ $re ]]; then
+      echo -1
+    else
+      echo "$myresult"
+    fi
   else
     echo "WARNING: No pmu string specified"
     echo -1
