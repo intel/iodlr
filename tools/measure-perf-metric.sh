@@ -74,10 +74,10 @@ function print_metric_array() {
 function usage() {
   local pname=`basename $0`
   echo "Usage:"
-  echo "$pname [-p pid | -a] [-m metric1,metric2,...] [-t time] [-r] [-v] [-d] [-h]"
+  echo "$pname [-p pid1,pid2,... | -a] [-m m1,m2,...] [-t time] [-r] [-v] [-d] [-h]"
   echo
   echo "  -a : Profile whole system"
-  echo "  -p pid : application process id to profile"
+  echo "  -p pid(s) : application process ids to profile"
   echo "  -m metrics : Use comma separator to specify one or many of the"
   echo "             following metrics"
   debug_mode=1
@@ -322,32 +322,57 @@ function init_perf_pmus() {
   rebuild_perf_pmu_args
 }
 
+# Check if process with pid is still running
+function check_pids() {
+  local OLDIFS=$IFS
+  local realpid=$app_process_id
+  IFS=","; read -ra local_pids <<< "${app_process_id}"
+
+  for i in "${local_pids[@]}"
+  do
+    echo "Checking if process with pid ${i} exists..."
+    realpid=`/bin/ps ax|grep ${i}|grep -v grep | grep -v bash`
+    if [ "x${realpid}" == "x" ]; then
+     echo "ERROR: Process with PID ${i} is not found. Exiting."
+     exit
+    fi
+  done
+  IFS=$OLDIFS
+}
+
+function print_perf_header() {
+  echo "Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds"
+  echo "perf ${perf_mode} -e ${PERF_PMUS}"
+}
+
 function collect_perf_data() {
   echo 
 
   # Check if process is still running"
-  echo "Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds"
-  echo "perf ${perf_mode} -e ${PERF_PMUS}"
 
   local perf_ret=0
   if [ "${profile_mode}" == "system" ]; then
     echo "--------------------------------------------------"
     echo "Profiling whole system"
     echo "--------------------------------------------------"
+
+    print_perf_header
+
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -a sleep ${PERF_DATA_COLLECTION_TIME}
     if [ $? != 0 ]; then
      echo "Perf -a failed. Exiting"
      exit
     fi
   else
-    realpid=`/bin/ps ax|grep ${app_process_id}|grep -v grep | grep -v bash`
-    if [ "x${realpid}" == "x" ]; then
-     echo "ERROR: Application with PID ${app_process_id} is not found"
-     exit
-    fi
+
+    check_pids
+
     echo "--------------------------------------------------"
     echo "Profile application with process id: $app_process_id"
     echo "--------------------------------------------------"
+
+    print_perf_header
+
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $app_process_id sleep ${PERF_DATA_COLLECTION_TIME}
     if [ $? != 0 ]; then
      echo "Perf -p $app_process_id failed. Exiting"
