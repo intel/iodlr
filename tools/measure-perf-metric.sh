@@ -74,7 +74,7 @@ function print_metric_array() {
 function usage() {
   local pname=`basename $0`
   echo "Usage:"
-  echo "$pname [-p pid1,pid2,... | -a] [-m m1,m2,...] [-t time] [-r] [-v] [-d] [-h]"
+  echo "$pname [-p pid1,pid2,... | -a] [-m m1,m2,...] [-t time] [-r] [-v] [-d] [-h] [-e \"applicaton <args,...>\"]"
   echo
   echo "  -a : Profile whole system"
   echo "  -p pid(s) : application process ids to profile"
@@ -87,6 +87,7 @@ function usage() {
   echo "  -r : Perf runs in record mode. Default is \"$default_perf_mode\" mode"
   echo "  -v : Verbose mode"
   echo "  -d : Debug mode"
+  echo "  -e : Specify application to run with arguments."
   echo "  -h : Help message"
   echo
   echo "  Examples:"
@@ -98,6 +99,9 @@ function usage() {
   echo
   echo "  3) Whole system collection:"
   echo "    $ measure-perf-metric.sh -a -t 30 -m itlb_stalls"
+  echo
+  echo "  4) Derive metric for an application"
+  echo "    $ measure-perf-metric.sh -e \"node index.js\" -m itlb_stalls"
   exit
 }
 
@@ -143,6 +147,7 @@ if [ $# -eq 0 ]; then
     usage
 fi
 
+command_name=""
 while [ "$1" != "" ]; do
   case $1 in
     -a) profile_mode="system"
@@ -164,15 +169,23 @@ while [ "$1" != "" ]; do
       ;;
     -d) debug_mode=1
       ;;
+    -e)
+      shift
+      command_name=$1
+      profile_mode="command"
+      ;;
     *) usage
       exit 1
   esac
   shift
 done
 
-if [ "x${app_process_id}" == "x" -a "${profile_mode}" == "one" ]; then
-  echo "ERROR: Please specify the application process id or use -a option to profile the whole system. Exiting."
-  exit
+
+if [ "x${command_name}" == "x" ]; then
+  if [ "x${app_process_id}" == "x" -a "${profile_mode}" == "one" ]; then
+   echo "ERROR: Please specify the application process id or use -a option to profile the whole system. Exiting."
+   exit
+  fi
 fi
 
 if [ "x${metric_name}" == "x" ]; then
@@ -348,8 +361,6 @@ function print_perf_header() {
 function collect_perf_data() {
   echo 
 
-  # Check if process is still running"
-
   local perf_ret=0
   if [ "${profile_mode}" == "system" ]; then
     echo "--------------------------------------------------"
@@ -363,8 +374,8 @@ function collect_perf_data() {
      echo "Perf -a failed. Exiting"
      exit
     fi
-  else
-
+  elif [ "${profile_mode}" == "one" ]; then
+    # Check if process is still running"
     check_pids
 
     echo "--------------------------------------------------"
@@ -376,6 +387,18 @@ function collect_perf_data() {
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $app_process_id sleep ${PERF_DATA_COLLECTION_TIME}
     if [ $? != 0 ]; then
      echo "Perf -p $app_process_id failed. Exiting"
+     exit
+    fi
+  elif [ "${profile_mode}" == "command" ]; then
+    # Check if command_name is given to profile
+    echo "--------------------------------------------------"
+    echo "Profiling \"${command_name}\""
+    echo "--------------------------------------------------"
+
+    print_perf_header
+    perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} ${command_name}
+    if [ $? != 0 ]; then
+     echo "Perf for $command_name failed. Exiting"
      exit
     fi
   fi
