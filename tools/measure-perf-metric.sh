@@ -354,8 +354,12 @@ function check_pids() {
 }
 
 function print_perf_header() {
-  echo "Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds"
-  echo "perf ${perf_mode} -e ${PERF_PMUS}"
+  if [ "${profile_mode}" == "command" ]; then
+    echo "perf ${perf_mode} -e ${PERF_PMUS} ${command_name}"
+  else
+    echo "Collect perf data for ${PERF_DATA_COLLECTION_TIME} seconds"
+    echo "perf ${perf_mode} -e ${PERF_PMUS}"
+  fi
 }
 
 function collect_perf_data() {
@@ -396,6 +400,8 @@ function collect_perf_data() {
     echo "--------------------------------------------------"
 
     print_perf_header
+    echo "--------------------------------------------------"
+
     perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} ${command_name}
     if [ $? != 0 ]; then
      echo "Perf for $command_name failed. Exiting"
