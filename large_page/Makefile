@@ -1,10 +1,15 @@
 all: liblarge_page.a
 
+CC=g++
+CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -fsanitize=address -z noexecstack -z relro -z now -fstack-protector -Wformat -Wformat-security -v
+AR=ar
+RM=/bin/rm
+
 %.o: %.cc
-	@g++ -O3 -fsanitize=address -v -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 liblarge_page.a: large_page.o
-	@ar rcs liblarge_page.a $<
+	$(AR) rcs liblarge_page.a $<
 
 clean:
-	@rm -f *.o *.a
+	$(RM) -f *.o *.a
