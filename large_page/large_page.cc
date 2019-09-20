@@ -33,7 +33,7 @@ extern char __textsegment;
 struct text_region {
   char* from;
   char* to;
-  int   total_largepages;
+  size_t   total_largepages;
   bool  found_text_region;
 };
 
@@ -62,6 +62,9 @@ static struct text_region FindTextRegion() {
   int64_t  start, end, offset, inode;
   struct text_region nregion;
 
+  nregion.from = NULL;
+  nregion.to = NULL;
+  nregion.total_largepages = 0;
   nregion.found_text_region = false;
 
   ifs.open("/proc/self/maps");
@@ -73,7 +76,12 @@ static struct text_region FindTextRegion() {
   std::string exename;
   {
       char selfexe[PATH_MAX];
-      ssize_t count = readlink("/proc/self/exe", selfexe, PATH_MAX);
+      const char * path = "/proc/self/exe";
+      ssize_t count = readlink(path, selfexe, PATH_MAX);
+      if (count < 0) {
+        fprintf(stderr, "Failed to read the contents of the link: %s", path);
+        return nregion;
+      }
       exename = std::string(selfexe, count);
   }
 
@@ -92,7 +100,7 @@ static struct text_region FindTextRegion() {
     if (inode != 0) {
       std::string pathname;
       iss >> pathname;
-      if (pathname == exename && permission == "r-xp" &&
+      if ( !pathname.empty() && pathname == exename && permission == "r-xp" &&
           start <= reinterpret_cast<int64_t>(&__textsegment) &&
 	  end >= reinterpret_cast<int64_t>(&__textsegment)) {
         char* from = &__textsegment;
@@ -162,6 +170,11 @@ MoveRegionToLargePages(const text_region& r) {
   int ret = 0;
 
   size_t size = r.to - r.from;
+  if (size < 0) {
+    fprintf(stderr, "Size of text segment is invalid (negative)\n");
+    return -1;
+  }
+
   void* start = r.from;
 
   // Allocate temporary region preparing for copy
@@ -183,43 +196,47 @@ MoveRegionToLargePages(const text_region& r) {
               MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
   if (tmem == MAP_FAILED) {
     PrintSystemError(errno);
-    munmap(nmem, size);
+    ret = munmap(nmem, size);
+    if (ret < 0) {
+      PrintSystemError(errno);
+      return ret;
+    }
     return -1;
   }
 
   ret = madvise(tmem, size, MADV_HUGEPAGE);
-  if (ret == -1) {
+  if (ret < 0) {
     PrintSystemError(errno);
     ret = munmap(tmem, size);
-    if (ret == -1) {
+    if (ret < 0) {
       PrintSystemError(errno);
     }
     ret = munmap(nmem, size);
-    if (ret == -1) {
+    if (ret < 0) {
       PrintSystemError(errno);
     }
 
-    return -1;
+    return ret;
   }
 
   memcpy(start, nmem, size);
   ret = mprotect(start, size, PROT_READ | PROT_EXEC);
-  if (ret == -1) {
+  if (ret < 0) {
     PrintSystemError(errno);
     ret = munmap(tmem, size);
-    if (ret == -1) {
+    if (ret < 0) {
       PrintSystemError(errno);
     }
     ret = munmap(nmem, size);
-    if (ret == -1) {
+    if (ret < 0) {
       PrintSystemError(errno);
     }
-    return -1;
+    return ret;
   }
 
   // Release the old/temporary mapped region
   ret = munmap(nmem, size);
-  if (ret == -1) {
+  if (ret < 0) {
     PrintSystemError(errno);
   }
 
