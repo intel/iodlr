@@ -1,7 +1,7 @@
 all: liblarge_page.a
 
 CC=g++
-CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -fsanitize=address -z noexecstack -z relro -z now -fstack-protector -Wformat -Wformat-security -v
+CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -fsanitize=address -z noexecstack -z relro -z now -fstack-protector -Wformat -Wformat-security -Wall
 AR=ar
 RM=/bin/rm
 
