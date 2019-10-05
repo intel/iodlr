@@ -23,8 +23,13 @@
 #ifndef LARGE_PAGE_H
 #define LARGE_PAGE_H
 
+typedef enum BOOL {
+    false = 0,
+    true
+} bool;
+
 int MapStaticCodeToLargePages();
-int MapStaticCodeToLargePages(char* from, char* to);
+int MapStaticCodeRangeToLargePages(void* from, void* to);
 bool IsLargePagesEnabled();
 
-#endif  // LARGE_PAGE_H:
+#endif  // LARGE_PAGE_H
