@@ -20,28 +20,31 @@
 //
 // SPDX-License-Identifier: MIT
 
+#include "large_page.h"
 #include <sys/mman.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
-#include <climits>
-#include <cstring>
-#include <fstream>
-#include <sstream>
 #include <inttypes.h>
+#include <linux/limits.h>
 
 extern char __textsegment;
 
-struct text_region {
-  char* from;
-  char* to;
-  size_t   total_largepages;
-  bool  found_text_region;
-};
+typedef struct _text_region {
+  void*     from;
+  void*     to;
+  size_t    total_largepages;
+  bool      found_text_region;
+} text_region;
 
-static const size_t hps = 2L * 1024 * 1024;
+#define HPS (2L * 1024 * 1024)
+
+static const size_t hps = HPS;
 
 static void PrintSystemError(int error) {
   fprintf(stderr, "Hugepages WARNING: %s\n", strerror(error));
-  return;
 }
 
 static inline uintptr_t largepage_align_up(uintptr_t addr) {
@@ -53,98 +56,97 @@ static inline uintptr_t largepage_align_down(uintptr_t addr) {
 }
 
 // Identify and return the text region in the currently mapped memory regions.
-static struct text_region FindTextRegion() {
-  std::ifstream ifs;
-  std::string map_line;
-  std::string permission;
-  std::string dev;
-  char dash;
-  uintptr_t  start, end, offset, inode;
-  struct text_region nregion;
+static text_region FindTextRegion() {
+  FILE* ifs = NULL;
+  size_t line_buff_size = PATH_MAX + 256; // One path + extra data
+  char* map_line = (char*)malloc(line_buff_size);
 
-  nregion.from = NULL;
-  nregion.to = NULL;
-  nregion.total_largepages = 0;
-  nregion.found_text_region = false;
+  char permission[5] = {0};         // xxxx
+  char dev[8];                      // xxx:xxx
+  char exename[PATH_MAX];           // One path
+  char pathname[PATH_MAX];          // One path
+  ssize_t total_read;
+  int64_t start, end, offset, inode;
 
-  ifs.open("/proc/self/maps");
+#define CLEANUP()                   \
+  if (ifs) { fclose(ifs); }         \
+  if (map_line) { free(map_line); }
+
+  text_region nregion = { NULL, NULL, 0, false };
+
+  ifs = fopen("/proc/self/maps", "rt");
   if (!ifs) {
     fprintf(stderr, "Could not open /proc/self/maps\n");
+    CLEANUP();
     return nregion;
   }
 
-  std::string exename;
-  {
-      char selfexe[PATH_MAX];
-      const char * path = "/proc/self/exe";
-      ssize_t count = readlink(path, selfexe, PATH_MAX);
-      if (count < 0) {
-        fprintf(stderr, "Failed to read the contents of the link: %s", path);
-        return nregion;
-      }
-      exename = std::string(selfexe, count);
+  const char path[] = "/proc/self/exe";
+  ssize_t count = readlink(path, exename, PATH_MAX);
+  if (count < 0) {
+    fprintf(stderr, "Failed to read the contents of the link: %s", path);
+    CLEANUP();
+    return nregion;
   }
 
   // The following is the format of the maps file
   // address           perms offset  dev   inode       pathname
   // 00400000-00452000 r-xp 00000000 08:02 173521      /usr/bin/dbus-daemon
-  while (std::getline(ifs, map_line)) {
-    std::istringstream iss(map_line);
-    iss >> std::hex >> start;
-    iss >> dash;
-    iss >> std::hex >> end;
-    iss >> permission;
-    iss >> offset;
-    iss >> dev;
-    iss >> inode;
+  while ((total_read = getline(&map_line, &line_buff_size, ifs))) {
+    if (total_read < 16) {
+      continue;
+    }
+    sscanf(map_line, " %lx-%lx %s %lx %s %lx %s ",
+           &start, &end, permission, &offset, dev, &inode, pathname);
     if (inode != 0) {
-      std::string pathname;
-      iss >> pathname;
-      if ( !pathname.empty() && pathname == exename && permission == "r-xp" &&
-          start <= reinterpret_cast<int64_t>(&__textsegment) &&
-	  end >= reinterpret_cast<int64_t>(&__textsegment)) {
-        char* from = &__textsegment;
-        char* to = reinterpret_cast<char*>(end);
-
+      if (strcmp(pathname, exename) == 0 &&
+          strcmp(permission, "r-xp") == 0 &&
+          start <= (int64_t)(&__textsegment) &&
+	        end >= (int64_t)(&__textsegment)) {
+        void* from = &__textsegment;
+        void* to = (void*)(end);
         if (from < to) {
           nregion.found_text_region = true;
           nregion.from = from;
           nregion.to = to;
+          break;
         }
-        break;
       }
     }
   }
-
-  ifs.close();
+  CLEANUP();
   return nregion;
 }
 
 static bool IsTransparentHugePagesEnabled() {
-  std::ifstream ifs;
+  FILE* ifs;
 
-  ifs.open("/sys/kernel/mm/transparent_hugepage/enabled");
+  ifs = fopen("/sys/kernel/mm/transparent_hugepage/enabled", "rt");
   if (!ifs) {
     fprintf(stderr, "Could not open file: " \
                     "/sys/kernel/mm/transparent_hugepage/enabled\n");
     return false;
   }
 
-  std::string always, madvise, never;
-  if (ifs.is_open()) {
-    while (ifs >> always >> madvise >> never) {}
+  char always[16] = {0};
+  char madvise[16] = {0};
+  char never[16] = {0};
+  int matched = fscanf(ifs, "%s %s %s", always, madvise, never);
+  fclose (ifs);
+
+  if (matched != 3) {
+    return false;
   }
 
-  int ret_status = false;
+  bool ret_status = false;
 
-  if (always.compare("[always]") == 0)
+  if (strcmp(always, "[always]") == 0) {
     ret_status = true;
-  else if (madvise.compare("[madvise]") == 0)
+  } else if (strcmp(madvise, "[madvise]") == 0) {
     ret_status = true;
-  else if (never.compare("[never]") == 0)
+  } else if (strcmp(never, "[never]") == 0) {
     ret_status = false;
-
-  ifs.close();
+  }
   return ret_status;
 }
 
@@ -162,30 +164,28 @@ static bool IsTransparentHugePagesEnabled() {
 // d. If successful copy the code there and unmap the original region
 static int
 __attribute__((__section__(".lpstub")))
-__attribute__((__aligned__(hps)))
+__attribute__((__aligned__(HPS)))
 __attribute__((__noinline__))
-MoveRegionToLargePages(const text_region& r) {
-  void* nmem = nullptr;
-  void* tmem = nullptr;
+MoveRegionToLargePages(const text_region* r) {
+  void* nmem = NULL;
+  void* tmem = NULL;
   int ret = 0;
-
-  size_t size = r.to - r.from;
+  size_t size = r->to - r->from;
   if (size < 0) {
     fprintf(stderr, "Size of text segment is invalid (negative)\n");
     return -1;
   }
-
-  void* start = r.from;
+  void* start = r->from;
 
   // Allocate temporary region preparing for copy
-  nmem = mmap(nullptr, size,
+  nmem = mmap(NULL, size,
               PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (nmem == MAP_FAILED) {
     PrintSystemError(errno);
     return -1;
   }
 
-  memcpy(nmem, r.from, size);
+  memcpy(nmem, r->from, size);
 
   // We already know the original page is r-xp
   // (PROT_READ, PROT_EXEC, MAP_PRIVATE)
@@ -244,24 +244,32 @@ MoveRegionToLargePages(const text_region& r) {
 }
 
 // Align the region to to be mapped to 2MB page boundaries.
-static void AlignRegionToPageBoundary(text_region& r) {
-  r.from = reinterpret_cast<char*>(largepage_align_up(reinterpret_cast<int64_t>(r.from)));
-  r.to = reinterpret_cast<char*>(largepage_align_down(reinterpret_cast<int64_t>(r.to)));
-  r.total_largepages = (r.to - r.from) / hps;
+static void AlignRegionToPageBoundary(text_region* r) {
+  r->from = (void*)(largepage_align_up((int64_t)(r->from)));
+  r->to = (void*)(largepage_align_down((int64_t)(r->to)));
+  r->total_largepages = (r->to - r->from) / hps;
 }
 
 // Align the region to to be mapped to 2MB page boundaries and then move the
 // region to large pages.
-static int AlignMoveRegionToLargePages(text_region& r) {
+static int AlignMoveRegionToLargePages(text_region* r) {
   AlignRegionToPageBoundary(r);
 
-  if (r.total_largepages < 1) {
-    fprintf(stderr, "Hugepages WARNING: region is too small for large pages\n");
+  if (r->from > r->to) {
+    fprintf(stderr,
+            "Hugepages WARNING: Invalid start/end addresses\n");
     return -1;
   }
 
-  if (r.from > reinterpret_cast<void*>(&MoveRegionToLargePages))
+  if (r->total_largepages < 1) {
+    fprintf(stderr,
+            "Hugepages WARNING: region is too small for large pages\n");
+    return -1;
+  }
+
+  if (r->from > (void*)MoveRegionToLargePages) {
     return MoveRegionToLargePages(r);
+  }
 
   return -1;
 }
@@ -283,21 +291,21 @@ static int AlignMoveRegionToLargePages(text_region& r) {
 //    * If successful, copy the code to the newly mapped area and unmap the
 //      original region.
 int MapStaticCodeToLargePages() {
-  struct text_region r = FindTextRegion();
+  text_region r = FindTextRegion();
   if (r.found_text_region == false) {
     fprintf(stderr, "Hugepages WARNING: failed to find text region\n");
     return -1;
   }
 
-  return AlignMoveRegionToLargePages(r);
+  return AlignMoveRegionToLargePages(&r);
 }
 
 // This function is similar to the function above. However, the region to be 
 // mapped to 2MB pages is specified for this version as hotStart and hotEnd.
-int MapStaticCodeToLargePages(char* hotStart, char* hotEnd) {
-  struct text_region r;
+int MapStaticCodeRangeToLargePages(void* hotStart, void* hotEnd) {
+  text_region r;
 
-  if (hotStart == nullptr || hotEnd == nullptr || hotStart > hotEnd) {
+  if (hotStart == NULL || hotEnd == NULL || hotStart > hotEnd) {
     fprintf(stderr, "Hugepages WARNING: Invalid values for hotStart"
             " and/or hotEnd\n");
     return -1;
@@ -306,7 +314,7 @@ int MapStaticCodeToLargePages(char* hotStart, char* hotEnd) {
   r.from = hotStart;
   r.to = hotEnd;
 
-  return AlignMoveRegionToLargePages(r);
+  return AlignMoveRegionToLargePages(&r);
 }
 
 // Return true if transparent huge pages is enabled on the system. Otherwise,
