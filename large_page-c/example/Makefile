@@ -3,14 +3,14 @@ CFLAGS=-O3
 OBJDIR=obj
 OBJS=$(addprefix $(OBJDIR)/,large_page_example.o large_page.o)
 LDFLAGS=-Wl,-T ../ld.implicit.script -Wl,-z,max-page-size=2097152
-VPATH=%.cc ..
+VPATH=%.c ..
 
 all: large_page_example
 
 large_page_example: $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
-$(OBJDIR)/%.o : %.cc
+$(OBJDIR)/%.o : %.c
 	$(CC) $(CFLAGS) -x c -o $@ -c -I.. $<
 
 $(OBJS): | $(OBJDIR)

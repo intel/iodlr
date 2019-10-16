@@ -5,7 +5,7 @@ CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -z noexecstack -z relro -z now -fstack-protector 
 AR=ar
 RM=/bin/rm
 
-%.o: %.cc
+%.o: %.c
 	$(CC) $(CFLAGS) -x c -c $< -o $@
 
 liblarge_page.a: large_page.o
