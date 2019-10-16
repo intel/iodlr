@@ -29,8 +29,9 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <linux/limits.h>
+#include <regex.h>
 
-extern char __textsegment;
+extern char __attribute__((weak))  __textsegment;
 
 typedef struct _text_region {
   void*     from;
@@ -56,7 +57,7 @@ static inline uintptr_t largepage_align_down(uintptr_t addr) {
 }
 
 // Identify and return the text region in the currently mapped memory regions.
-static text_region FindTextRegion() {
+static text_region FindTextRegion(const char* lib_regex) {
   FILE* ifs = NULL;
   size_t line_buff_size = PATH_MAX + 256; // One path + extra data
   char* map_line = (char*)malloc(line_buff_size);
@@ -66,25 +67,35 @@ static text_region FindTextRegion() {
   char exename[PATH_MAX];           // One path
   char pathname[PATH_MAX];          // One path
   ssize_t total_read;
+  bool result;
+  regex_t regex;
   int64_t start, end, offset, inode;
 
 #define CLEANUP()                   \
   if (ifs) { fclose(ifs); }         \
-  if (map_line) { free(map_line); }
+  if (map_line) { free(map_line); } \
+  regfree(&regex);
 
   text_region nregion = { NULL, NULL, 0, false };
 
   ifs = fopen("/proc/self/maps", "rt");
   if (!ifs) {
     fprintf(stderr, "Could not open /proc/self/maps\n");
+    return nregion;
+  }
+
+  result = (lib_regex != NULL) ||
+           (readlink("/proc/self/exe", exename, PATH_MAX) > 0);
+  if (!result) {
+    fprintf(stderr, "Failed to read the contents of /proc/self/exe");
     CLEANUP();
     return nregion;
   }
 
-  const char path[] = "/proc/self/exe";
-  ssize_t count = readlink(path, exename, PATH_MAX);
-  if (count < 0) {
-    fprintf(stderr, "Failed to read the contents of the link: %s", path);
+  result = (lib_regex == NULL) ||
+           (regcomp(&regex, lib_regex, 0) == 0);
+  if (!result) {
+    fprintf(stderr, "Unable to compile lib regex: %s", lib_regex);
     CLEANUP();
     return nregion;
   }
@@ -92,25 +103,25 @@ static text_region FindTextRegion() {
   // The following is the format of the maps file
   // address           perms offset  dev   inode       pathname
   // 00400000-00452000 r-xp 00000000 08:02 173521      /usr/bin/dbus-daemon
-  while ((total_read = getline(&map_line, &line_buff_size, ifs))) {
+  while ((total_read = getline(&map_line, &line_buff_size, ifs)) > 0) {
     if (total_read < 16) {
       continue;
     }
     sscanf(map_line, " %lx-%lx %s %lx %s %lx %s ",
            &start, &end, permission, &offset, dev, &inode, pathname);
-    if (inode != 0) {
-      if (strcmp(pathname, exename) == 0 &&
-          strcmp(permission, "r-xp") == 0 &&
-          start <= (int64_t)(&__textsegment) &&
-	        end >= (int64_t)(&__textsegment)) {
-        void* from = &__textsegment;
-        void* to = (void*)(end);
-        if (from < to) {
-          nregion.found_text_region = true;
-          nregion.from = from;
-          nregion.to = to;
-          break;
-        }
+    if (inode != 0 && strcmp(permission, "r-xp") == 0) {
+      if (lib_regex == NULL) {
+        result = (strcmp(pathname, exename) == 0 &&
+                  start <= (int64_t)(&__textsegment) &&
+                  end >= (int64_t)(&__textsegment));
+      } else {
+        result = (regexec(&regex, pathname, 0, NULL, 0) == 0);
+      }
+      if (result) {
+        nregion.found_text_region = true;
+        nregion.from = (void*)start;
+        nregion.to = (void*)end;
+        break;
       }
     }
   }
@@ -170,12 +181,8 @@ MoveRegionToLargePages(const text_region* r) {
   void* nmem = NULL;
   void* tmem = NULL;
   int ret = 0;
-  size_t size = r->to - r->from;
-  if (size < 0) {
-    fprintf(stderr, "Size of text segment is invalid (negative)\n");
-    return -1;
-  }
   void* start = r->from;
+  size_t size = r->to - r->from;
 
   // Allocate temporary region preparing for copy
   nmem = mmap(NULL, size,
@@ -245,9 +252,31 @@ MoveRegionToLargePages(const text_region* r) {
 
 // Align the region to to be mapped to 2MB page boundaries.
 static void AlignRegionToPageBoundary(text_region* r) {
-  r->from = (void*)(largepage_align_up((int64_t)(r->from)));
-  r->to = (void*)(largepage_align_down((int64_t)(r->to)));
+  r->from = (void*)(largepage_align_up((int64_t)r->from));
+  r->to = (void*)(largepage_align_down((int64_t)r->to));
   r->total_largepages = (r->to - r->from) / hps;
+}
+
+static bool IsRegionValid(text_region* r) {
+  if (r->found_text_region == false) {
+    fprintf(stderr, "Hugepages WARNING: failed to find text region\n");
+    return false;
+  }
+
+  if (r->from == NULL || r->to == NULL || r->from > r->to) {
+    fprintf(stderr,
+            "Hugepages WARNING: Invalid start/end addresses: %lx %lx\n",
+             (size_t)r->from, (size_t)r->to);
+    return false;
+  }
+
+  if (r->total_largepages < 1) {
+    fprintf(stderr,
+            "Hugepages WARNING: region is too small for large pages\n");
+    return false;
+  }
+
+  return true;
 }
 
 // Align the region to to be mapped to 2MB page boundaries and then move the
@@ -255,19 +284,12 @@ static void AlignRegionToPageBoundary(text_region* r) {
 static int AlignMoveRegionToLargePages(text_region* r) {
   AlignRegionToPageBoundary(r);
 
-  if (r->from > r->to) {
-    fprintf(stderr,
-            "Hugepages WARNING: Invalid start/end addresses\n");
+  if (IsRegionValid(r) == false) {
     return -1;
   }
 
-  if (r->total_largepages < 1) {
-    fprintf(stderr,
-            "Hugepages WARNING: region is too small for large pages\n");
-    return -1;
-  }
-
-  if (r->from > (void*)MoveRegionToLargePages) {
+  if (r->from > (void*)MoveRegionToLargePages ||
+      r->to < (void*)MoveRegionToLargePages) {
     return MoveRegionToLargePages(r);
   }
 
@@ -291,29 +313,22 @@ static int AlignMoveRegionToLargePages(text_region* r) {
 //    * If successful, copy the code to the newly mapped area and unmap the
 //      original region.
 int MapStaticCodeToLargePages() {
-  text_region r = FindTextRegion();
-  if (r.found_text_region == false) {
-    fprintf(stderr, "Hugepages WARNING: failed to find text region\n");
+  text_region r = FindTextRegion(NULL);
+  return AlignMoveRegionToLargePages(&r);
+}
+
+int MapDSOToLargePages(const char* lib_regex) {
+  if (lib_regex == NULL) {
     return -1;
   }
-
+  text_region r = FindTextRegion(lib_regex);
   return AlignMoveRegionToLargePages(&r);
 }
 
 // This function is similar to the function above. However, the region to be 
 // mapped to 2MB pages is specified for this version as hotStart and hotEnd.
 int MapStaticCodeRangeToLargePages(void* hotStart, void* hotEnd) {
-  text_region r;
-
-  if (hotStart == NULL || hotEnd == NULL || hotStart > hotEnd) {
-    fprintf(stderr, "Hugepages WARNING: Invalid values for hotStart"
-            " and/or hotEnd\n");
-    return -1;
-  }
-
-  r.from = hotStart;
-  r.to = hotEnd;
-
+  text_region r = {hotStart, hotEnd, true, 0};
   return AlignMoveRegionToLargePages(&r);
 }
 
