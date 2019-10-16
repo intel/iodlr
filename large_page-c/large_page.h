@@ -29,6 +29,7 @@ typedef enum BOOL {
 } bool;
 
 int MapStaticCodeToLargePages();
+int MapDSOToLargePages(const char* lib_regex);
 int MapStaticCodeRangeToLargePages(void* from, void* to);
 bool IsLargePagesEnabled();
 
