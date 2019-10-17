@@ -277,7 +277,7 @@ static map_status AlignMoveRegionToLargePages(text_region* r) {
   }
 
   if (r->from > (void*)MoveRegionToLargePages ||
-      r->to < (void*)MoveRegionToLargePages) {
+      r->to <= (void*)MoveRegionToLargePages) {
     return MoveRegionToLargePages(r) == -1 ? map_see_errno : map_ok;
   }
 
