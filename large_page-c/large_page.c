@@ -44,11 +44,7 @@ typedef struct _text_region {
 
 static const size_t hps = HPS;
 
-static void PrintSystemError(int error) {
-  fprintf(stderr, "Hugepages WARNING: %s\n", strerror(error));
-}
-
-static inline uintptr_t largepage_align_up(uintptr_t addr) {
+static inline uint64_t largepage_align_up(uint64_t addr) {
   return (((addr) + (hps) - 1) & ~((hps) - 1));
 }
 
@@ -57,7 +53,7 @@ static inline uintptr_t largepage_align_down(uintptr_t addr) {
 }
 
 // Identify and return the text region in the currently mapped memory regions.
-static text_region FindTextRegion(const char* lib_regex) {
+static map_status FindTextRegion(const char* lib_regex, text_region* region) {
   FILE* ifs = NULL;
   size_t line_buff_size = PATH_MAX + 256; // One path + extra data
   char* map_line = (char*)malloc(line_buff_size);
@@ -76,28 +72,23 @@ static text_region FindTextRegion(const char* lib_regex) {
   if (map_line) { free(map_line); } \
   regfree(&regex);
 
-  text_region nregion = { NULL, NULL, 0, false };
-
   ifs = fopen("/proc/self/maps", "rt");
   if (!ifs) {
-    fprintf(stderr, "Could not open /proc/self/maps\n");
-    return nregion;
+    return map_maps_open_failed;
   }
 
   result = (lib_regex != NULL) ||
            (readlink("/proc/self/exe", exename, PATH_MAX) > 0);
   if (!result) {
-    fprintf(stderr, "Failed to read the contents of /proc/self/exe");
     CLEANUP();
-    return nregion;
+    return map_exe_path_read_failed;
   }
 
   result = (lib_regex == NULL) ||
            (regcomp(&regex, lib_regex, 0) == 0);
   if (!result) {
-    fprintf(stderr, "Unable to compile lib regex: %s", lib_regex);
     CLEANUP();
-    return nregion;
+    return map_invalid_regex;
   }
 
   // The following is the format of the maps file
@@ -118,25 +109,24 @@ static text_region FindTextRegion(const char* lib_regex) {
         result = (regexec(&regex, pathname, 0, NULL, 0) == 0);
       }
       if (result) {
-        nregion.found_text_region = true;
-        nregion.from = (void*)start;
-        nregion.to = (void*)end;
+        region->found_text_region = true;
+        region->from = (void*)start;
+        region->to = (void*)end;
         break;
       }
     }
   }
   CLEANUP();
-  return nregion;
+  return region->found_text_region ? map_ok : map_region_not_found;
 }
 
-static bool IsTransparentHugePagesEnabled() {
+static map_status IsTransparentHugePagesEnabled(bool* result) {
   FILE* ifs;
 
+  *result = false;
   ifs = fopen("/sys/kernel/mm/transparent_hugepage/enabled", "rt");
   if (!ifs) {
-    fprintf(stderr, "Could not open file: " \
-                    "/sys/kernel/mm/transparent_hugepage/enabled\n");
-    return false;
+    return map_failed_to_open_thp_file;
   }
 
   char always[16] = {0};
@@ -146,19 +136,18 @@ static bool IsTransparentHugePagesEnabled() {
   fclose (ifs);
 
   if (matched != 3) {
-    return false;
+    return map_malformed_thp_file;
   }
-
-  bool ret_status = false;
 
   if (strcmp(always, "[always]") == 0) {
-    ret_status = true;
+    *result = true;
   } else if (strcmp(madvise, "[madvise]") == 0) {
-    ret_status = true;
+    *result = true;
   } else if (strcmp(never, "[never]") == 0) {
-    ret_status = false;
+    *result = false;
   }
-  return ret_status;
+
+  return map_ok;
 }
 
 // Move specified region to large pages. We need to be very careful.
@@ -173,7 +162,7 @@ static bool IsTransparentHugePagesEnabled() {
 //    the same virtual address
 // c. madvise with MADV_HUGE_PAGE
 // d. If successful copy the code there and unmap the original region
-static int
+static map_status
 __attribute__((__section__(".lpstub")))
 __attribute__((__aligned__(HPS)))
 __attribute__((__noinline__))
@@ -181,6 +170,7 @@ MoveRegionToLargePages(const text_region* r) {
   void* nmem = NULL;
   void* tmem = NULL;
   int ret = 0;
+  map_status status = map_ok;
   void* start = r->from;
   size_t size = r->to - r->from;
 
@@ -188,8 +178,7 @@ MoveRegionToLargePages(const text_region* r) {
   nmem = mmap(NULL, size,
               PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (nmem == MAP_FAILED) {
-    PrintSystemError(errno);
-    return -1;
+    return map_see_errno;
   }
 
   memcpy(nmem, r->from, size);
@@ -202,52 +191,55 @@ MoveRegionToLargePages(const text_region* r) {
               PROT_READ | PROT_WRITE | PROT_EXEC,
               MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
   if (tmem == MAP_FAILED) {
-    PrintSystemError(errno);
+    status = map_see_errno_mmap_tmem_failed;
     ret = munmap(nmem, size);
     if (ret < 0) {
-      PrintSystemError(errno);
-      return ret;
+      status = map_see_errno_mmap_tmem_munmap_nmem_failed;
     }
-    return -1;
+    return status;
   }
 
   ret = madvise(tmem, size, MADV_HUGEPAGE);
   if (ret < 0) {
-    PrintSystemError(errno);
+    status = map_see_errno_madvise_tmem_failed;
     ret = munmap(tmem, size);
     if (ret < 0) {
-      PrintSystemError(errno);
+      status = map_see_errno_madvise_tmem_munmap_tmem_failed;
     }
     ret = munmap(nmem, size);
     if (ret < 0) {
-      PrintSystemError(errno);
+      status = (status == map_see_errno_madvise_tmem_munmap_tmem_failed)
+        ? map_see_errno_madvise_tmem_munmaps_failed
+        : map_see_errno_madvise_tmem_munmap_nmem_failed;
     }
 
-    return ret;
+    return status;
   }
 
   memcpy(start, nmem, size);
   ret = mprotect(start, size, PROT_READ | PROT_EXEC);
   if (ret < 0) {
-    PrintSystemError(errno);
+    status = map_see_errno_mprotect_failed;
     ret = munmap(tmem, size);
     if (ret < 0) {
-      PrintSystemError(errno);
+      status = map_see_errno_mprotect_munmap_tmem_failed;
     }
     ret = munmap(nmem, size);
     if (ret < 0) {
-      PrintSystemError(errno);
+      status = (status == map_see_errno_mprotect_munmap_tmem_failed)
+        ? map_see_errno_mprotect_munmaps_failed
+        : map_see_errno_mprotect_munmap_tmem_failed;
     }
-    return ret;
+    return status;
   }
 
   // Release the old/temporary mapped region
   ret = munmap(nmem, size);
   if (ret < 0) {
-    PrintSystemError(errno);
+    status = map_see_errno_munmap_nmem_failed;
   }
 
-  return ret;
+  return status;
 }
 
 // Align the region to to be mapped to 2MB page boundaries.
@@ -257,43 +249,39 @@ static void AlignRegionToPageBoundary(text_region* r) {
   r->total_largepages = (r->to - r->from) / hps;
 }
 
-static bool IsRegionValid(text_region* r) {
+static map_status IsRegionValid(text_region* r) {
   if (r->found_text_region == false) {
-    fprintf(stderr, "Hugepages WARNING: failed to find text region\n");
-    return false;
+    return map_region_not_found;
   }
 
   if (r->from == NULL || r->to == NULL || r->from > r->to) {
-    fprintf(stderr,
-            "Hugepages WARNING: Invalid start/end addresses: %lx %lx\n",
-             (size_t)r->from, (size_t)r->to);
-    return false;
+    return map_invalid_region_address;
   }
 
   if (r->total_largepages < 1) {
-    fprintf(stderr,
-            "Hugepages WARNING: region is too small for large pages\n");
-    return false;
+    return map_region_too_small;
   }
 
-  return true;
+  return map_ok;
 }
 
 // Align the region to to be mapped to 2MB page boundaries and then move the
 // region to large pages.
-static int AlignMoveRegionToLargePages(text_region* r) {
+static map_status AlignMoveRegionToLargePages(text_region* r) {
+  map_status status;
   AlignRegionToPageBoundary(r);
 
-  if (IsRegionValid(r) == false) {
-    return -1;
+  status = IsRegionValid(r);
+  if (status != map_ok) {
+    return status;
   }
 
   if (r->from > (void*)MoveRegionToLargePages ||
       r->to < (void*)MoveRegionToLargePages) {
-    return MoveRegionToLargePages(r);
+    return MoveRegionToLargePages(r) == -1 ? map_see_errno : map_ok;
   }
 
-  return -1;
+  return map_mover_overlaps;
 }
 
 // Map the .text segment of the linked application into 2MB pages.
@@ -312,28 +300,39 @@ static int AlignMoveRegionToLargePages(text_region* r) {
 //    * Use madvise with MADV_HUGE_PAGE to use anonymous 2M pages.
 //    * If successful, copy the code to the newly mapped area and unmap the
 //      original region.
-int MapStaticCodeToLargePages() {
-  text_region r = FindTextRegion(NULL);
+map_status MapStaticCodeToLargePages() {
+  text_region r;
+  map_status status = FindTextRegion(NULL, &r);
+  if (status != map_ok) {
+    return status;
+  }
   return AlignMoveRegionToLargePages(&r);
 }
 
-int MapDSOToLargePages(const char* lib_regex) {
+map_status MapDSOToLargePages(const char* lib_regex) {
+  map_status status;
+  text_region r;
+
   if (lib_regex == NULL) {
-    return -1;
+    return map_null_regex;
   }
-  text_region r = FindTextRegion(lib_regex);
+
+  status = FindTextRegion(lib_regex, &r);
+  if (status != map_ok) {
+    return status;
+  }
   return AlignMoveRegionToLargePages(&r);
 }
 
 // This function is similar to the function above. However, the region to be 
 // mapped to 2MB pages is specified for this version as hotStart and hotEnd.
-int MapStaticCodeRangeToLargePages(void* hotStart, void* hotEnd) {
-  text_region r = {hotStart, hotEnd, true, 0};
+map_status MapStaticCodeRangeToLargePages(void* from, void* to) {
+  text_region r = {from, to, true, 0};
   return AlignMoveRegionToLargePages(&r);
 }
 
 // Return true if transparent huge pages is enabled on the system. Otherwise,
 // return false.
-bool IsLargePagesEnabled() {
-  return IsTransparentHugePagesEnabled();
+map_status IsLargePagesEnabled(bool* result) {
+  return IsTransparentHugePagesEnabled(result);
 }

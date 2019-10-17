@@ -28,9 +28,34 @@ typedef enum BOOL {
     true
 } bool;
 
-int MapStaticCodeToLargePages();
-int MapDSOToLargePages(const char* lib_regex);
-int MapStaticCodeRangeToLargePages(void* from, void* to);
-bool IsLargePagesEnabled();
+typedef enum {
+  map_ok,
+  map_exe_path_read_failed,
+  map_failed_to_open_thp_file,
+  map_invalid_regex,
+  map_invalid_region_address,
+  map_malformed_thp_file,
+  map_maps_open_failed,
+  map_mover_overlaps,
+  map_null_regex,
+  map_region_not_found,
+  map_region_too_small,
+  map_see_errno,
+  map_see_errno_madvise_tmem_failed,
+  map_see_errno_madvise_tmem_munmap_nmem_failed,
+  map_see_errno_madvise_tmem_munmaps_failed,
+  map_see_errno_madvise_tmem_munmap_tmem_failed,
+  map_see_errno_mmap_tmem_failed,
+  map_see_errno_mmap_tmem_munmap_nmem_failed,
+  map_see_errno_mprotect_failed,
+  map_see_errno_mprotect_munmaps_failed,
+  map_see_errno_mprotect_munmap_tmem_failed,
+  map_see_errno_munmap_nmem_failed,
+} map_status;
+
+map_status MapStaticCodeToLargePages();
+map_status MapDSOToLargePages(const char* lib_regex);
+map_status MapStaticCodeRangeToLargePages(void* from, void* to);
+map_status IsLargePagesEnabled(bool* result);
 
 #endif  // LARGE_PAGE_H
