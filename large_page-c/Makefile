@@ -1,3 +1,4 @@
+.PHONY: all
 all: liblarge_page.a
 
 CC=gcc
@@ -11,5 +12,6 @@ RM=/bin/rm
 liblarge_page.a: large_page.o
 	$(AR) rcs liblarge_page.a $<
 
+.PHONY: clean
 clean:
 	$(RM) -f *.o *.a
