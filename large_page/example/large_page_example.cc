@@ -3,9 +3,9 @@
 
 int main()
 {
-   if (IsLargePagesEnabled)
+   if (IsLargePagesEnabled())
      std::cout<<"Transparent Huge Pages is enabled"<<std::endl;
    else
-     std::cout<<"Transparent Huge Pages is enabled"<<std::endl;
+     std::cout<<"Transparent Huge Pages is not enabled"<<std::endl;
    return 0;
 }
