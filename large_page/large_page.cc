@@ -44,11 +44,11 @@ static void PrintSystemError(int error) {
   return;
 }
 
-static inline uint64_t largepage_align_up(uint64_t addr) {
+static inline uintptr_t largepage_align_up(uintptr_t addr) {
   return (((addr) + (hps) - 1) & ~((hps) - 1));
 }
 
-static inline uint64_t largepage_align_down(uint64_t addr) {
+static inline uintptr_t largepage_align_down(uintptr_t addr) {
   return ((addr) & ~((hps) - 1));
 }
 
@@ -59,7 +59,7 @@ static struct text_region FindTextRegion() {
   std::string permission;
   std::string dev;
   char dash;
-  int64_t  start, end, offset, inode;
+  uintptr_t  start, end, offset, inode;
   struct text_region nregion;
 
   nregion.from = NULL;
