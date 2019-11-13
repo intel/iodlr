@@ -56,8 +56,6 @@ function calc_frontend_bound() {
   local b=`return_pmu_value "idq_uops_not_delivered.core" $perf_data_file`
   local threads=2 #with HT on there are 2 threads per core
 
-  echo "A:${a}"
-  echo "B:${b}"
   if [ $a == -1 -o $b == -1 ]; then
     echo "ERROR: ${metric_name} can't be derived. Missing pmus"
   else
