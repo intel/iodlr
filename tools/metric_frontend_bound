@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Copyright (C) 2018 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so, 
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+# OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+# OR OTHER DEALINGS IN THE SOFTWARE.
+#
+# SPDX-License-Identifier: MIT
+
+SCRIPTS_DIR=`dirname $0`
+source ${SCRIPTS_DIR}/utils.sh
+
+function init_frontend_bound() {
+  local local_pmu_array=(cpu_clk_unhalted.thread_any idq_uops_not_delivered.core)
+  local local_pmus
+  for item in ${local_pmu_array[*]}
+  do
+    if [ "x${local_pmus}" == "x" ]; then
+      local_pmus="$item"
+    else
+      local_pmus="$local_pmus,$item"
+    fi
+  done
+  echo $local_pmus
+}
+
+function calc_frontend_bound() {
+  local perf_data_file="$1"
+  local metric_name="metric_frontend_bound>"
+  echo
+  echo "================================================="
+  echo "Final ${metric_name}"
+  echo "--------------------------------------------------"
+  echo "FORMULA: ${metric_name} = 100*b/(4*(a/threads))"
+  echo "         where, a=cpu_clk_unhalted.thread_any"
+  echo "                b=idq_uops_not_delivered.core"
+  echo "================================================="
+
+  local a=`return_pmu_value "cpu_clk_unhalted.thread_any" $perf_data_file `
+  local b=`return_pmu_value "idq_uops_not_delivered.core" $perf_data_file`
+  local threads=2 #with HT on there are 2 threads per core
+
+  echo "A:${a}"
+  echo "B:${b}"
+  if [ $a == -1 -o $b == -1 ]; then
+    echo "ERROR: ${metric_name} can't be derived. Missing pmus"
+  else
+    local metric=`echo "scale=$bc_scale;100*${b}/(4*(${a}/${threads}))"| bc -l`
+    echo "${metric_name}=${metric}"
+  fi
+  echo
+}
