@@ -67,6 +67,8 @@ static map_status FindTextRegion(const char* lib_regex, text_region* region) {
   regex_t regex;
   int64_t start, end, offset, inode;
 
+  region->found_text_region = false;
+
 #define CLEANUP()                   \
   if (ifs) { fclose(ifs); }         \
   if (map_line) { free(map_line); } \
@@ -74,6 +76,7 @@ static map_status FindTextRegion(const char* lib_regex, text_region* region) {
 
   ifs = fopen("/proc/self/maps", "rt");
   if (!ifs) {
+    free(map_line);
     return map_maps_open_failed;
   }
 
