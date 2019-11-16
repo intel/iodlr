@@ -43,7 +43,7 @@ int main() {
       fprintf(stderr, "Failed to map: %s\n", map_status_text[status]);
       return status;
     }
-    printf("Success");
+    printf("Success\n");
   } else {
       printf("Transparent Huge Pages are not enabled\n");
   }
