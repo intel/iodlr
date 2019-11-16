@@ -23,10 +23,7 @@
 #ifndef LARGE_PAGE_H
 #define LARGE_PAGE_H
 
-typedef enum BOOL {
-    false = 0,
-    true
-} bool;
+#include <stdbool.h>
 
 typedef enum {
   map_ok,
