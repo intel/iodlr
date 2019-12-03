@@ -8,6 +8,7 @@ static char* map_status_text[] = {
   "invalid regex",
   "invalid region boundaries",
   "malformed thp enablement status file",
+  "malformed /proc/<PID>/maps file",
   "failed to open maps file",
   "the remapping function is part of the region",
   "regex was NULL",
@@ -21,9 +22,10 @@ static char* map_status_text[] = {
   "mapping of destination failed",
   "mapping of destination and unmapping of temporary failed",
   "mprotect failed",
+  "mprotect and unmapping of temporary failed",
   "mprotect and unmappings failed",
   "mprotect and unmapping of destination failed",
-  "mprotect and unmapping of temporary failed",
+  "unmapping of temporary failed",
 };
 
 int main() {
@@ -32,7 +34,8 @@ int main() {
 
   status = IsLargePagesEnabled(&is_enabled);
   if (status != map_ok) {
-    fprintf(stderr, "Failed to check enablement: %s\n", map_status_text[status]);
+    fprintf(stderr, "Failed to check enablement: %s\n",
+            map_status_text[status]);
     return status;
   }
 
