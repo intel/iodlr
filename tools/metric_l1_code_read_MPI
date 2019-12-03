@@ -58,7 +58,7 @@ function calc_l1_code_read_MPI() {
   if [ $a == -1 -o $b == -1 ]; then
     echo "ERROR: metric_L1_code_read_MPI can't be derived. Missing pmus"
   else
-    local metric=`echo "scale=$scale;(${a}/${b})"| bc -l`
+    local metric=`echo "scale=$bc_scale;100*(${a}/${b})"| bc -l`
     echo "metric_L1_code_read_MPI=${metric}"
   fi
   echo
