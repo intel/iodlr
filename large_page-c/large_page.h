@@ -20,8 +20,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-#ifndef LARGE_PAGE_H
-#define LARGE_PAGE_H
+#ifndef LARGE_PAGE_H_
+#define LARGE_PAGE_H_
 
 #include <stdbool.h>
 
@@ -32,6 +32,7 @@ typedef enum {
   map_invalid_regex,
   map_invalid_region_address,
   map_malformed_thp_file,
+  map_malformed_maps_file,
   map_maps_open_failed,
   map_mover_overlaps,
   map_null_regex,
@@ -45,6 +46,7 @@ typedef enum {
   map_see_errno_mmap_tmem_failed,
   map_see_errno_mmap_tmem_munmap_nmem_failed,
   map_see_errno_mprotect_failed,
+  map_see_errno_mprotect_munmap_nmem_failed,
   map_see_errno_mprotect_munmaps_failed,
   map_see_errno_mprotect_munmap_tmem_failed,
   map_see_errno_munmap_nmem_failed,
@@ -55,4 +57,4 @@ map_status MapDSOToLargePages(const char* lib_regex);
 map_status MapStaticCodeRangeToLargePages(void* from, void* to);
 map_status IsLargePagesEnabled(bool* result);
 
-#endif  // LARGE_PAGE_H
+#endif  // LARGE_PAGE_H_

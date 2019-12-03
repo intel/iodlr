@@ -33,65 +33,59 @@
 
 extern char __attribute__((weak))  __textsegment;
 
-typedef struct _text_region {
+typedef struct {
   void*     from;
   void*     to;
-  size_t    total_largepages;
-  bool      found_text_region;
-} text_region;
+} mem_range;
 
 #define HPS (2L * 1024 * 1024)
-
-static const size_t hps = HPS;
-
-static inline uint64_t largepage_align_up(uint64_t addr) {
-  return (((addr) + (hps) - 1) & ~((hps) - 1));
-}
+#define SAFE_DEL(p, func) {if (p) { func(p); p = NULL; }}
 
 static inline uintptr_t largepage_align_down(uintptr_t addr) {
-  return ((addr) & ~((hps) - 1));
+  return (addr & ~(HPS - 1));
+}
+
+static inline uintptr_t largepage_align_up(uintptr_t addr) {
+  return largepage_align_down(addr + HPS - 1);
 }
 
 // Identify and return the text region in the currently mapped memory regions.
-static map_status FindTextRegion(const char* lib_regex, text_region* region) {
+static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
   FILE* ifs = NULL;
-  size_t line_buff_size = PATH_MAX + 256; // One path + extra data
-  char* map_line = (char*)malloc(line_buff_size);
-
-  char permission[5] = {0};         // xxxx
-  char dev[8];                      // xxx:xxx
-  char exename[PATH_MAX];           // One path
-  char pathname[PATH_MAX];          // One path
-  ssize_t total_read;
+  char* map_line = NULL;
+  size_t line_buff_size = 0;
+  char permission[5] = {0};                 // xxxx
+  char dev[8] = {0};                        // xxx:xxx
+  char exename[PATH_MAX] = {0};             // One path
+  char pathname[PATH_MAX] = {0};            // One path
   bool result;
-  regex_t regex;
-  int64_t start, end, offset, inode;
+  regex_t regex = {0};
+  ssize_t total_read;
+  uintptr_t start, end;
+  int64_t offset, inode;
+  int matched;
 
-  region->found_text_region = false;
-
-#define CLEANUP()                   \
-  if (ifs) { fclose(ifs); }         \
-  if (map_line) { free(map_line); } \
-  regfree(&regex);
+#define CLEAN_EXIT(retcode)         \
+  SAFE_DEL(ifs, fclose);            \
+  SAFE_DEL(map_line, free);         \
+  regfree(&regex);                  \
+  return retcode;
 
   ifs = fopen("/proc/self/maps", "rt");
   if (!ifs) {
-    free(map_line);
-    return map_maps_open_failed;
+    CLEAN_EXIT(map_maps_open_failed);
   }
 
   result = (lib_regex != NULL) ||
            (readlink("/proc/self/exe", exename, PATH_MAX) > 0);
   if (!result) {
-    CLEANUP();
-    return map_exe_path_read_failed;
+    CLEAN_EXIT(map_exe_path_read_failed);
   }
 
   result = (lib_regex == NULL) ||
            (regcomp(&regex, lib_regex, 0) == 0);
   if (!result) {
-    CLEANUP();
-    return map_invalid_regex;
+    CLEAN_EXIT(map_invalid_regex);
   }
 
   // The following is the format of the maps file
@@ -101,30 +95,39 @@ static map_status FindTextRegion(const char* lib_regex, text_region* region) {
     if (total_read < 16) {
       continue;
     }
-    sscanf(map_line, " %lx-%lx %s %lx %s %lx %s ",
-           &start, &end, permission, &offset, dev, &inode, pathname);
+    matched = sscanf(map_line, " %lx-%lx %s %lx %s %lx %s ",
+                     &start, &end, permission,
+                     &offset, dev, &inode, pathname);
+    if (matched < 6) {
+      CLEAN_EXIT(map_malformed_maps_file);
+    }
     if (inode != 0 && strcmp(permission, "r-xp") == 0) {
       if (lib_regex == NULL) {
         result = (strcmp(pathname, exename) == 0 &&
-                  start <= (int64_t)(&__textsegment) &&
-                  end >= (int64_t)(&__textsegment));
+                  start <= (uintptr_t)(&__textsegment) &&
+                  end >= (uintptr_t)(&__textsegment));
+        start = (uintptr_t)(&__textsegment);
       } else {
         result = (regexec(&regex, pathname, 0, NULL, 0) == 0);
       }
       if (result) {
-        region->found_text_region = true;
         region->from = (void*)start;
         region->to = (void*)end;
-        break;
+        CLEAN_EXIT(map_ok);
       }
     }
   }
-  CLEANUP();
-  return region->found_text_region ? map_ok : map_region_not_found;
+  CLEAN_EXIT(map_region_not_found);
+
+#undef CLEAN_EXIT
 }
 
 static map_status IsTransparentHugePagesEnabled(bool* result) {
   FILE* ifs;
+  char always[16] = {0};
+  char madvise[16] = {0};
+  char never[16] = {0};
+  int matched;
 
   *result = false;
   ifs = fopen("/sys/kernel/mm/transparent_hugepage/enabled", "rt");
@@ -132,11 +135,8 @@ static map_status IsTransparentHugePagesEnabled(bool* result) {
     return map_failed_to_open_thp_file;
   }
 
-  char always[16] = {0};
-  char madvise[16] = {0};
-  char never[16] = {0};
-  int matched = fscanf(ifs, "%s %s %s", always, madvise, never);
-  fclose (ifs);
+  matched = fscanf(ifs, "%s %s %s", always, madvise, never);
+  fclose(ifs);
 
   if (matched != 3) {
     return map_malformed_thp_file;
@@ -169,7 +169,7 @@ static map_status
 __attribute__((__section__(".lpstub")))
 __attribute__((__aligned__(HPS)))
 __attribute__((__noinline__))
-MoveRegionToLargePages(const text_region* r) {
+MoveRegionToLargePages(const mem_range* r) {
   void* nmem = NULL;
   void* tmem = NULL;
   int ret = 0;
@@ -190,51 +190,47 @@ MoveRegionToLargePages(const text_region* r) {
   // (PROT_READ, PROT_EXEC, MAP_PRIVATE)
   // We want PROT_WRITE because we are writing into it.
   // We want it at the fixed address and we use MAP_FIXED.
+#define CLEAN_EXIT_CHECK(oper)                          \
+  if (tmem == MAP_FAILED) {                             \
+    status = oper##_failed;                             \
+    ret = munmap(nmem, size);                           \
+    if (ret < 0) {                                      \
+      status = oper##_munmap_nmem_failed;               \
+    }                                                   \
+    return status;                                      \
+  }
+
   tmem = mmap(start, size,
-              PROT_READ | PROT_WRITE | PROT_EXEC,
-              MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
-  if (tmem == MAP_FAILED) {
-    status = map_see_errno_mmap_tmem_failed;
-    ret = munmap(nmem, size);
-    if (ret < 0) {
-      status = map_see_errno_mmap_tmem_munmap_nmem_failed;
-    }
-    return status;
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
+  CLEAN_EXIT_CHECK(map_see_errno_mmap_tmem);
+
+#undef CLEAN_EXIT_CHECK
+
+#define CLEAN_EXIT_CHECK(oper)                          \
+  if (ret < 0) {                                        \
+    status = oper##_failed;                             \
+    ret = munmap(tmem, size);                           \
+    if (ret < 0) {                                      \
+      status = oper##_munmap_tmem_failed;               \
+    }                                                   \
+    ret = munmap(nmem, size);                           \
+    if (ret < 0) {                                      \
+      status = (status == oper##_munmap_tmem_failed)    \
+        ? oper##_munmaps_failed                         \
+        : oper##_munmap_nmem_failed;                    \
+    }                                                   \
+    return status;                                      \
   }
 
   ret = madvise(tmem, size, MADV_HUGEPAGE);
-  if (ret < 0) {
-    status = map_see_errno_madvise_tmem_failed;
-    ret = munmap(tmem, size);
-    if (ret < 0) {
-      status = map_see_errno_madvise_tmem_munmap_tmem_failed;
-    }
-    ret = munmap(nmem, size);
-    if (ret < 0) {
-      status = (status == map_see_errno_madvise_tmem_munmap_tmem_failed)
-        ? map_see_errno_madvise_tmem_munmaps_failed
-        : map_see_errno_madvise_tmem_munmap_nmem_failed;
-    }
-
-    return status;
-  }
+  CLEAN_EXIT_CHECK(map_see_errno_madvise_tmem);
 
   memcpy(start, nmem, size);
   ret = mprotect(start, size, PROT_READ | PROT_EXEC);
-  if (ret < 0) {
-    status = map_see_errno_mprotect_failed;
-    ret = munmap(tmem, size);
-    if (ret < 0) {
-      status = map_see_errno_mprotect_munmap_tmem_failed;
-    }
-    ret = munmap(nmem, size);
-    if (ret < 0) {
-      status = (status == map_see_errno_mprotect_munmap_tmem_failed)
-        ? map_see_errno_mprotect_munmaps_failed
-        : map_see_errno_mprotect_munmap_tmem_failed;
-    }
-    return status;
-  }
+  CLEAN_EXIT_CHECK(map_see_errno_mprotect);
+
+#undef CLEAN_EXIT_CHECK
 
   // Release the old/temporary mapped region
   ret = munmap(nmem, size);
@@ -246,22 +242,17 @@ MoveRegionToLargePages(const text_region* r) {
 }
 
 // Align the region to to be mapped to 2MB page boundaries.
-static void AlignRegionToPageBoundary(text_region* r) {
-  r->from = (void*)(largepage_align_up((int64_t)r->from));
-  r->to = (void*)(largepage_align_down((int64_t)r->to));
-  r->total_largepages = (r->to - r->from) / hps;
+static void AlignRegionToPageBoundary(mem_range* r) {
+  r->from = (void*)(largepage_align_up((uintptr_t)r->from));
+  r->to = (void*)(largepage_align_down((uintptr_t)r->to));
 }
 
-static map_status IsRegionValid(text_region* r) {
-  if (r->found_text_region == false) {
-    return map_region_not_found;
-  }
-
+static map_status CheckMemRange(mem_range* r) {
   if (r->from == NULL || r->to == NULL || r->from > r->to) {
     return map_invalid_region_address;
   }
 
-  if (r->total_largepages < 1) {
+  if (r->to - r->from < HPS) {
     return map_region_too_small;
   }
 
@@ -270,11 +261,11 @@ static map_status IsRegionValid(text_region* r) {
 
 // Align the region to to be mapped to 2MB page boundaries and then move the
 // region to large pages.
-static map_status AlignMoveRegionToLargePages(text_region* r) {
+static map_status AlignMoveRegionToLargePages(mem_range* r) {
   map_status status;
   AlignRegionToPageBoundary(r);
 
-  status = IsRegionValid(r);
+  status = CheckMemRange(r);
   if (status != map_ok) {
     return status;
   }
@@ -304,7 +295,7 @@ static map_status AlignMoveRegionToLargePages(text_region* r) {
 //    * If successful, copy the code to the newly mapped area and unmap the
 //      original region.
 map_status MapStaticCodeToLargePages() {
-  text_region r;
+  mem_range r = {0};
   map_status status = FindTextRegion(NULL, &r);
   if (status != map_ok) {
     return status;
@@ -313,8 +304,8 @@ map_status MapStaticCodeToLargePages() {
 }
 
 map_status MapDSOToLargePages(const char* lib_regex) {
+  mem_range r = {0};
   map_status status;
-  text_region r;
 
   if (lib_regex == NULL) {
     return map_null_regex;
@@ -327,10 +318,10 @@ map_status MapDSOToLargePages(const char* lib_regex) {
   return AlignMoveRegionToLargePages(&r);
 }
 
-// This function is similar to the function above. However, the region to be 
+// This function is similar to the function above. However, the region to be
 // mapped to 2MB pages is specified for this version as hotStart and hotEnd.
 map_status MapStaticCodeRangeToLargePages(void* from, void* to) {
-  text_region r = {from, to, true, 0};
+  mem_range r = {from, to};
   return AlignMoveRegionToLargePages(&r);
 }
 
