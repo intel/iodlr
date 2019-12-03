@@ -330,3 +330,57 @@ map_status MapStaticCodeRangeToLargePages(void* from, void* to) {
 map_status IsLargePagesEnabled(bool* result) {
   return IsTransparentHugePagesEnabled(result);
 }
+
+const char* MapStatusStr(map_status status, bool fulltext) {
+  static const char* map_status_text[] = {
+    "map_ok",
+      "ok",
+    "map_exe_path_read_failed",
+      "failed to read executable path file",
+    "map_failed_to_open_thp_file",
+      "failed to open thp enablement status file",
+    "map_invalid_regex",
+      "invalid regex",
+    "map_invalid_region_address",
+      "invalid region boundaries",
+    "map_malformed_thp_file",
+      "malformed thp enablement status file",
+    "map_malformed_maps_file",
+      "malformed /proc/<PID>/maps file",
+    "map_maps_open_failed",
+      "failed to open maps file",
+    "map_mover_overlaps",
+      "the remapping function is part of the region",
+    "map_null_regex",
+      "regex was NULL",
+    "map_region_not_found",
+      "map region not found",
+    "map_region_too_small",
+      "map region too small",
+    "map_see_errno",
+      "see errno",
+    "map_see_errno_madvise_tmem_failed",
+      "madvise for destination failed",
+    "map_see_errno_madvise_tmem_munmap_nmem_failed",
+      "madvise for destination and unmapping of temporary failed",
+    "map_see_errno_madvise_tmem_munmaps_failed",
+      "madvise for destination and unmappings failed",
+    "map_see_errno_madvise_tmem_munmap_tmem_failed",
+      "madvise for destination and unmapping of destination failed",
+    "map_see_errno_mmap_tmem_failed",
+      "mapping of destination failed",
+    "map_see_errno_mmap_tmem_munmap_nmem_failed",
+      "mapping of destination and unmapping of temporary failed",
+    "map_see_errno_mprotect_failed",
+      "mprotect failed",
+    "map_see_errno_mprotect_munmap_nmem_failed",
+      "mprotect and unmapping of temporary failed",
+    "map_see_errno_mprotect_munmaps_failed",
+      "mprotect and unmappings failed",
+    "map_see_errno_mprotect_munmap_tmem_failed",
+      "mprotect and unmapping of destination failed",
+    "map_see_errno_munmap_nmem_failed",
+      "unmapping of temporary failed"
+  };
+  return map_status_text[((int)status << 1) + (fulltext & 1)];
+}

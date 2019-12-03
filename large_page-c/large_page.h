@@ -52,9 +52,13 @@ typedef enum {
   map_see_errno_munmap_nmem_failed,
 } map_status;
 
+#define MAP_STATUS_STR(status)        MapStatusStr(status, true)
+#define MAP_STATUS_STR_SHORT(status)  MapStatusStr(status, false)
+
 map_status MapStaticCodeToLargePages();
 map_status MapDSOToLargePages(const char* lib_regex);
 map_status MapStaticCodeRangeToLargePages(void* from, void* to);
 map_status IsLargePagesEnabled(bool* result);
+const char* MapStatusStr(map_status status, bool fulltext);
 
 #endif  // LARGE_PAGE_H_
