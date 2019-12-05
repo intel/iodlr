@@ -27,7 +27,7 @@ SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
 function init_l2_demand_code_MPI() {
-  local local_pmu_array=(instructions l2_rqsts.all_code_rd)
+  local local_pmu_array=(instructions l2_rqsts.code_rd_miss)
   for item in ${local_pmu_array[*]}
   do
     if [ "x${local_pmus}" == "x" ]; then
@@ -46,11 +46,11 @@ function calc_l2_demand_code_MPI() {
   echo "Final L2_demand_code MPI metric"
   echo "--------------------------------------------------"
   echo "FORMULA: metric_L2_demand_code_MPI = (a/b)"
-  echo "         where, a=l2_rqsts.all_code_rd"
+  echo "         where, a=l2_rqsts.code_rd_miss"
   echo "                b=instructions"
   echo "================================================="
 
-  local a=`return_pmu_value "l2_rqsts.all_code_rd" $perf_data_file `
+  local a=`return_pmu_value "l2_rqsts.code_rd_miss" $perf_data_file `
   local b=`return_pmu_value "instructions" $perf_data_file`
   if [ $a == -1 -o $b == -1 ]; then
     echo "ERROR: metric_L2_demand_code_MPI can't be derived. Missing pmus"
