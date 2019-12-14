@@ -277,8 +277,7 @@ MapStatus AlignMoveRegionToLargePages(MemRange r) {
     return status;
   }
 
-  if (r.from > (void*)MoveRegionToLargePages ||
-      r.to <= (void*)MoveRegionToLargePages) {
+  if (r.to <= (void*)MoveRegionToLargePages) {
     return MoveRegionToLargePages(r);
   }
 
