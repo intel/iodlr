@@ -123,6 +123,7 @@ static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
 }
 
 static map_status IsTransparentHugePagesEnabled(bool* result) {
+#if defined(ENABLE_LARGE_CODE_PAGES) && ENABLE_LARGE_CODE_PAGES
   FILE* ifs;
   char always[16] = {0};
   char madvise[16] = {0};
@@ -151,6 +152,9 @@ static map_status IsTransparentHugePagesEnabled(bool* result) {
   }
 
   return map_ok;
+#else
+  return map_unsupported_platform;
+#endif  // ENABLE_LARGE_CODE_PAGES
 }
 
 // Move specified region to large pages. We need to be very careful.
@@ -380,7 +384,9 @@ const char* MapStatusStr(map_status status, bool fulltext) {
     "map_see_errno_mprotect_munmap_tmem_failed",
       "mprotect and unmapping of destination failed",
     "map_see_errno_munmap_nmem_failed",
-      "unmapping of temporary failed"
+      "unmapping of temporary failed",
+    "map_unsupported_platform",
+      "mapping to large pages is not supported on this platform",
   };
   return map_status_text[((int)status << 1) + (fulltext & 1)];
 }

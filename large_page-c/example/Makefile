@@ -1,15 +1,21 @@
 CC=gcc
 CFLAGS?=-O3
-OBJDIR=obj
-OBJS=$(addprefix $(OBJDIR)/,large_page_example.o large_page.o)
+OBJDIR=$(shell realpath obj)
+OBJS=$(addprefix $(OBJDIR)/,large_page_example.o)
 LDFLAGS=-Wl,-T ../ld.implicit.script -Wl,-z,max-page-size=2097152
-VPATH=%.c ..
 
 .PHONY: all
 all: large_page_example
 
-large_page_example: $(OBJS)
-	$(CC) $(LDFLAGS) $(OBJS) -o $@
+LARGE_PAGE_EXAMPLE_DEPS=    \
+	$(OBJS)                   \
+	$(OBJDIR)/liblarge_page.a \
+
+large_page_example: $(LARGE_PAGE_EXAMPLE_DEPS)
+	$(CC) $(LDFLAGS) $(LARGE_PAGE_EXAMPLE_DEPS) -o $@
+
+$(OBJDIR)/liblarge_page.a:
+	$(MAKE) -C .. OUTDIR=$(OBJDIR)
 
 $(OBJDIR)/%.o : %.c
 	$(CC) $(CFLAGS) -x c -o $@ -c -I.. $<
@@ -20,4 +26,5 @@ $(OBJDIR):
 	@mkdir -p $(OBJDIR)
 
 clean:
+	$(MAKE) -C .. OUTDIR=$(OBJDIR) clean
 	@rm -rf $(OBJDIR) large_page_example
