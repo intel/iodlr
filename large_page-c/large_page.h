@@ -50,6 +50,7 @@ typedef enum {
   map_see_errno_mprotect_munmaps_failed,
   map_see_errno_mprotect_munmap_tmem_failed,
   map_see_errno_munmap_nmem_failed,
+  map_unsupported_platform,
 } map_status;
 
 #define MAP_STATUS_STR(status)        MapStatusStr(status, true)

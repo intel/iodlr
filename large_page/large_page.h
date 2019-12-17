@@ -53,6 +53,7 @@ namespace largepage {
         map_see_errno_mprotect_munmaps_failed,
         map_see_errno_mprotect_munmap_tmem_failed,
         map_see_errno_munmap_nmem_failed,
+        map_unsupported_platform,
     };
 
     MapStatus MapStaticCodeToLargePages(const std::string& regexpr = "");
