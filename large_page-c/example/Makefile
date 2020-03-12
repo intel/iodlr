@@ -1,7 +1,26 @@
 CC=gcc
 CFLAGS?=-O3
 OBJDIR=$(shell realpath obj)
-OBJS=$(addprefix $(OBJDIR)/,large_page_example.o)
+OBJFILES=              \
+  large_page_example.o \
+  filler1.o            \
+  filler2.o            \
+  filler3.o            \
+  filler4.o            \
+  filler5.o            \
+  filler6.o            \
+  filler7.o            \
+  filler8.o            \
+  filler9.o            \
+  filler10.o           \
+  filler11.o           \
+  filler12.o           \
+  filler13.o           \
+  filler14.o           \
+  filler15.o           \
+  filler16.o           \
+
+OBJS=$(addprefix $(OBJDIR)/,$(OBJFILES))
 LDFLAGS=-Wl,-T ../ld.implicit.script -Wl,-z,max-page-size=2097152
 
 .PHONY: all

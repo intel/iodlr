@@ -32,6 +32,7 @@
 #include <regex.h>
 
 extern char __attribute__((weak))  __textsegment;
+extern char __start_lpstub;
 
 typedef struct {
   void*     from;
@@ -103,10 +104,14 @@ static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
     }
     if (inode != 0 && strcmp(permission, "r-xp") == 0) {
       if (lib_regex == NULL) {
+        uintptr_t lpstub_start = ((uintptr_t)(&__start_lpstub));
         result = (strcmp(pathname, exename) == 0 &&
                   start <= (uintptr_t)(&__textsegment) &&
                   end >= (uintptr_t)(&__textsegment));
         start = (uintptr_t)(&__textsegment);
+        if (lpstub_start < end) {
+          end = lpstub_start;
+        }
       } else {
         result = (regexec(&regex, pathname, 0, NULL, 0) == 0);
       }
@@ -170,7 +175,7 @@ static map_status IsTransparentHugePagesEnabled(bool* result) {
 // c. madvise with MADV_HUGE_PAGE
 // d. If successful copy the code there and unmap the original region
 static map_status
-__attribute__((__section__(".lpstub")))
+__attribute__((__section__("lpstub")))
 __attribute__((__aligned__(HPS)))
 __attribute__((__noinline__))
 MoveRegionToLargePages(const mem_range* r) {
@@ -274,12 +279,7 @@ static map_status AlignMoveRegionToLargePages(mem_range* r) {
     return status;
   }
 
-  if (r->from > (void*)MoveRegionToLargePages ||
-      r->to <= (void*)MoveRegionToLargePages) {
-    return MoveRegionToLargePages(r);
-  }
-
-  return map_mover_overlaps;
+  return MoveRegionToLargePages(r);
 }
 
 // Map the .text segment of the linked application into 2MB pages.
@@ -353,8 +353,6 @@ const char* MapStatusStr(map_status status, bool fulltext) {
       "malformed /proc/<PID>/maps file",
     "map_maps_open_failed",
       "failed to open maps file",
-    "map_mover_overlaps",
-      "the remapping function is part of the region",
     "map_null_regex",
       "regex was NULL",
     "map_region_not_found",

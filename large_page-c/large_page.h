@@ -34,7 +34,6 @@ typedef enum {
   map_malformed_thp_file,
   map_malformed_maps_file,
   map_maps_open_failed,
-  map_mover_overlaps,
   map_null_regex,
   map_region_not_found,
   map_region_too_small,
