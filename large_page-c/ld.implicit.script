@@ -5,10 +5,3 @@
     }
   }
   INSERT AFTER .init;
-
-  SECTIONS {
-    .lpstub ALIGN(0x200000): {
-       *(.lpstub)
-    }
-  }
-  INSERT AFTER .text;
