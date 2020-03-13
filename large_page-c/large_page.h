@@ -27,13 +27,10 @@
 
 typedef enum {
   map_ok,
-  map_exe_path_read_failed,
   map_failed_to_open_thp_file,
   map_invalid_regex,
   map_invalid_region_address,
   map_malformed_thp_file,
-  map_malformed_maps_file,
-  map_maps_open_failed,
   map_null_regex,
   map_region_not_found,
   map_region_too_small,
