@@ -20,7 +20,9 @@
 //
 // SPDX-License-Identifier: MIT
 
+#define _GNU_SOURCE
 #include "large_page.h"
+#include <link.h>
 #include <sys/mman.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,6 +41,14 @@ typedef struct {
   void*     to;
 } mem_range;
 
+typedef struct {
+  uintptr_t start;
+  uintptr_t end;
+  regex_t regex;
+  bool have_regex;
+  uintptr_t start_symbol;
+} FindParams;
+
 #define HPS (2L * 1024 * 1024)
 #define SAFE_DEL(p, func) {if (p) { func(p); p = NULL; }}
 
@@ -50,81 +60,101 @@ static inline uintptr_t largepage_align_up(uintptr_t addr) {
   return largepage_align_down(addr + HPS - 1);
 }
 
+static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
+  int idx;
+  FindParams* find_params = (FindParams*)data;
+
+  // We are only interested in the information matching the regex or, if no
+  // regex was given, the mapping matching the main executable. This latter
+  // mapping has the empty string for a name.
+  if ((find_params->have_regex &&
+        regexec(&find_params->regex, hdr->dlpi_name, 0, NULL, 0) == 0) ||
+      hdr->dlpi_name[0] == 0) {
+
+    // Once we have found the info structure for the desired linked-in object,
+    // we iterate over the mappings it lists to see if we can find the one that
+    // is executable that we are interested in.
+    for (idx = 0; idx < hdr->dlpi_phnum; idx++) {
+      const ElfW(Phdr)* phdr = &hdr->dlpi_phdr[idx];
+
+      // This check identifies an executable mapping.
+      if (phdr->p_type == PT_LOAD && phdr->p_flags & PF_X) {
+        uintptr_t start = hdr->dlpi_addr + phdr->p_vaddr;
+        uintptr_t end = start + phdr->p_memsz;
+
+        // If we were given a reference symbol, we perform an additional check
+        // to ensure that we return an executable mapping that contains the
+        // reference symbol because the linked-in object under scrutiny may have
+        // more than one executable mapping.
+        if (find_params->start_symbol != 0 &&
+            (find_params->start_symbol < start ||
+                find_params->start_symbol > end)) {
+          continue;
+        }
+
+        find_params->start = start;
+        find_params->end = end;
+        return 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
 // Identify and return the text region in the currently mapped memory regions.
 static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
-  FILE* ifs = NULL;
-  char* map_line = NULL;
-  size_t line_buff_size = 0;
-  char permission[5] = {0};                 // xxxx
-  char dev[8] = {0};                        // xxx:xxx
-  char exename[PATH_MAX] = {0};             // One path
-  char pathname[PATH_MAX] = {0};            // One path
-  bool result;
-  regex_t regex = {0};
-  ssize_t total_read;
-  uintptr_t start, end;
-  int64_t offset, inode;
-  int matched;
+  FindParams find_params = { 0, 0, { 0 }, false, 0 };
 
-#define CLEAN_EXIT(retcode)         \
-  SAFE_DEL(ifs, fclose);            \
-  SAFE_DEL(map_line, free);         \
-  regfree(&regex);                  \
-  return retcode;
-
-  ifs = fopen("/proc/self/maps", "rt");
-  if (!ifs) {
-    CLEAN_EXIT(map_maps_open_failed);
-  }
-
-  result = (lib_regex != NULL) ||
-           (readlink("/proc/self/exe", exename, PATH_MAX) > 0);
-  if (!result) {
-    CLEAN_EXIT(map_exe_path_read_failed);
-  }
-
-  result = (lib_regex == NULL) ||
-           (regcomp(&regex, lib_regex, 0) == 0);
-  if (!result) {
-    CLEAN_EXIT(map_invalid_regex);
-  }
-
-  // The following is the format of the maps file
-  // address           perms offset  dev   inode       pathname
-  // 00400000-00452000 r-xp 00000000 08:02 173521      /usr/bin/dbus-daemon
-  while ((total_read = getline(&map_line, &line_buff_size, ifs)) > 0) {
-    if (total_read < 16) {
-      continue;
+  if (lib_regex == NULL) {
+    // If we have no regex it means that we wish to remap the .text segment of
+    // the main executable, so we must pass a reference symbol to the iterator
+    // in case the main executable has multiple executable segments. The
+    // reference symbol will let the iterator return the executable segment
+    // containing the reference symbol rather than some other executable
+    // segment.
+    find_params.start_symbol = ((uintptr_t)(&__textsegment));
+  } else {
+    if (regcomp(&find_params.regex, lib_regex, 0) != 0) {
+      return map_invalid_regex;
     }
-    matched = sscanf(map_line, " %lx-%lx %s %lx %s %lx %s ",
-                     &start, &end, permission,
-                     &offset, dev, &inode, pathname);
-    if (matched < 6) {
-      CLEAN_EXIT(map_malformed_maps_file);
-    }
-    if (inode != 0 && strcmp(permission, "r-xp") == 0) {
-      if (lib_regex == NULL) {
-        uintptr_t lpstub_start = ((uintptr_t)(&__start_lpstub));
-        result = (strcmp(pathname, exename) == 0 &&
-                  start <= (uintptr_t)(&__textsegment) &&
-                  end >= (uintptr_t)(&__textsegment));
-        start = (uintptr_t)(&__textsegment);
-        if (lpstub_start < end) {
-          end = lpstub_start;
-        }
-      } else {
-        result = (regexec(&regex, pathname, 0, NULL, 0) == 0);
-      }
-      if (result) {
-        region->from = (void*)start;
-        region->to = (void*)end;
-        CLEAN_EXIT(map_ok);
-      }
+    find_params.have_regex = true;
+  }
+
+  // We iterate over all the mappings created for the main executable and any of
+  // its linked-in dependencies. The return value of `FindMapping` will become
+  // the return value of `dl_iterate_phdr`.
+  if (dl_iterate_phdr(FindMapping, &find_params) == 0) {
+    regfree(&find_params.regex);
+    return map_region_not_found;
+  }
+
+  if (lib_regex == NULL) {
+    // If we have no regex, we are dealing with the executable segment
+    // containing the executable sections of the main executable itself.
+    uintptr_t lpstub_start = ((uintptr_t)(&__start_lpstub));
+
+    // In the main executable the range that we find may contain more sections
+    // than just .text. Thus, we must use the reference symbol as the start of
+    // the range we wish to remap.
+    find_params.start = find_params.start_symbol;
+
+    // Since we are dealing with the main executable the range that we found may
+    // also contain the `lpstub` section which contains the code responsible for
+    // performing the actual remapping. Since we do not want to remap that
+    // portion of the code, we must adjust the range to exclude the `lpstub`
+    // section. Here we make the assumption that the `lpstub` section is found
+    // after the `.text` section.
+    if (lpstub_start < find_params.end) {
+      find_params.end = lpstub_start;
     }
   }
-  CLEAN_EXIT(map_region_not_found);
 
-#undef CLEAN_EXIT
+  region->from = (void*)find_params.start;
+  region->to = (void*)find_params.end;
+
+  regfree(&find_params.regex);
+  return map_ok;
 }
 
 static map_status IsTransparentHugePagesEnabled(bool* result) {
@@ -339,8 +369,6 @@ const char* MapStatusStr(map_status status, bool fulltext) {
   static const char* map_status_text[] = {
     "map_ok",
       "ok",
-    "map_exe_path_read_failed",
-      "failed to read executable path file",
     "map_failed_to_open_thp_file",
       "failed to open thp enablement status file",
     "map_invalid_regex",
@@ -349,10 +377,6 @@ const char* MapStatusStr(map_status status, bool fulltext) {
       "invalid region boundaries",
     "map_malformed_thp_file",
       "malformed thp enablement status file",
-    "map_malformed_maps_file",
-      "malformed /proc/<PID>/maps file",
-    "map_maps_open_failed",
-      "failed to open maps file",
     "map_null_regex",
       "regex was NULL",
     "map_region_not_found",
