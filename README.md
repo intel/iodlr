@@ -31,6 +31,5 @@ Please submit an issue using native github.com interface: https://github.com/int
 
 ## How to contribute
 
-Create a pull request on github.com with your patch. Make sure your change is
-cleanly building. A maintainer will contact you if there are questions or concerns.
-
+Please refer to the [Contributing guide](CONTRIBUTING.md) for details on how to contribute
+to this project.
