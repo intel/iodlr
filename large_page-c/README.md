@@ -79,7 +79,7 @@ map_status MapStaticCodeToLargePages();
 Attempts to map an application's `.text` region to large pages.
 
 If the region is not aligned to 2 MiB then the portion of the page that lies
-below the first multiple of 2 MiB remains mapped to small pages. Likewhise, if
+below the first multiple of 2 MiB remains mapped to small pages. Likewise, if
 the region does not end at an address that is a multiple of 2 MiB, the remainder
 of the region will remain mapped to small pages. The portion in-between will be
 mapped to large pages.
@@ -97,7 +97,7 @@ Retrieves an address range from the process' maps file associated with a DSO
 whose name matches `lib_regex` and attempts to map it to large pages.
 
 If the region is not aligned to 2 MiB then the portion of the page that lies
-below the first multiple of 2 MiB remains mapped to small pages. Likewhise, if
+below the first multiple of 2 MiB remains mapped to small pages. Likewise, if
 the region does not end at an address that is a multiple of 2 MiB, the remainder
 of the region will remain mapped to small pages. The portion in-between will be
 mapped to large pages.
@@ -114,7 +114,7 @@ map_status MapStaticCodeRangeToLargePages(void* from, void* to);
 Attempts to map the given address range to large pages.
 
 If the region is not aligned to 2 MiB then the portion of the page that lies
-below the first multiple of 2 MiB remains mapped to small pages. Likewhise, if
+below the first multiple of 2 MiB remains mapped to small pages. Likewise, if
 the region does not end at an address that is a multiple of 2 MiB, the remainder
 of the region will remain mapped to small pages. The portion in-between will be
 mapped to large pages.
@@ -127,7 +127,7 @@ map_status IsLargePagesEnabled(bool* result);
 
 - `[out] result`: Whether large pages are enabled.
 
-Performs a platorm-dependent check to determine whether it is possible to map to
+Performs a platform-dependent check to determine whether it is possible to map to
 large pages and stores the result of the check in `result`.
 
 ### MapStatusStr
