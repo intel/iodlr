@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# Copyright (C) 2018 Intel Corporation
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so, 
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+# OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+# OR OTHER DEALINGS IN THE SOFTWARE.
+#
+# SPDX-License-Identifier: MIT
+
+SCRIPTS_DIR=`dirname $0`
+source ${SCRIPTS_DIR}/utils.sh
+echo "ERR: $err_pmus"
+
+function init_dsb_cache() {
+  local local_pmu_array=(idq.dsb_uops idq.ms_uops idq.mite_uops lsd.uops dsb2mite_switches.penalty_cycles cycles)
+  local local_pmus
+  for item in ${local_pmu_array[*]}
+  do
+    if [ "x${local_pmus}" == "x" ]; then
+      local_pmus="$item"
+    else
+      local_pmus="$local_pmus,$item"
+    fi
+  done
+  echo $local_pmus
+}
+
+function calc_dsb_use() {
+  local perf_data_file="$1"
+  local metric_name="metric_dsb_use"
+  echo
+  echo "================================================="
+  echo "Final ${metric_name}"
+  echo "--------------------------------------------------"
+  echo "FORMULA: ${metric_name} = 100*(a/(a + b + c + d))"
+  echo "         where, a=idq.dsb_uops"
+  echo "                b=idq.ms_uops"
+  echo "                c=idq.mite_uops"
+  echo "                d=lsd.uops"
+  echo "================================================="
+
+  local a=`return_pmu_value "idq.dsb_uops" $perf_data_file `
+  local b=`return_pmu_value "idq.ms_uops" $perf_data_file`
+  local c=`return_pmu_value "idq.mite_uops" $perf_data_file`
+  local d=`return_pmu_value "lsd.uops" $perf_data_file`
+
+  if [ $a == -1 -o $b == -1 -o $c == -1 ]; then
+    echo "ERROR: ${metric_name} can't be derived. Missing pmus"
+  else
+    local metric=`echo "scale=$bc_scale;100*(${a}/(${a}+${b}+${c}+${d}))"| bc -l`
+    echo "${metric_name}%=${metric}"
+  fi
+  echo
+}
+
+function calc_mite_use() {
+  local perf_data_file="$1"
+  local metric_name="metric_mite_use"
+  echo
+  echo "================================================="
+  echo "Final ${metric_name}"
+  echo "--------------------------------------------------"
+  echo "FORMULA: ${metric_name} = 100*(c/(a + b + c + d))"
+  echo "         where, a=idq.dsb_uops"
+  echo "                b=idq.ms_uops"
+  echo "                c=idq.mite_uops"
+  echo "                d=lsd.uops"
+  echo "================================================="
+
+  local a=`return_pmu_value "idq.dsb_uops" $perf_data_file `
+  local b=`return_pmu_value "idq.ms_uops" $perf_data_file`
+  local c=`return_pmu_value "idq.mite_uops" $perf_data_file`
+  local d=`return_pmu_value "lsd.uops" $perf_data_file`
+
+  if [ $a == -1 -o $b == -1 -o $c == -1 ]; then
+    echo "ERROR: ${metric_name} can't be derived. Missing pmus"
+  else
+    local metric=`echo "scale=$bc_scale;100*(${c}/(${a}+${b}+${c}+${d}))"| bc -l`
+    echo "${metric_name}%=${metric}"
+  fi
+  echo
+}
+
+function calc_ifu_switch_penalty() {
+  local perf_data_file="$1"
+  local metric_name="metric_ifu_switch_penalty"
+  echo
+  echo "================================================="
+  echo "Final ${metric_name}"
+  echo "--------------------------------------------------"
+  echo "FORMULA: ${metric_name} = 100*(a/b)"
+  echo "         where, a=dsb2mite_switches.penalty_cycles"
+  echo "                b=cycles"
+  echo "================================================="
+
+  local a=`return_pmu_value "dsb2mite_switches.penalty_cycles" $perf_data_file `
+  local b=`return_pmu_value "cycles" $perf_data_file`
+
+  if [ $a == -1 -o $b == -1 ]; then
+    echo "ERROR: ${metric_name} can't be derived. Missing pmus"
+  else
+    local metric=`echo "scale=$bc_scale;100*(${a}/${b})"| bc -l`
+    echo "${metric_name}%=${metric}"
+  fi
+  echo
+}
+
+function calc_dsb_cache() {
+  local perf_data_file="$1"
+  calc_mite_use $perf_data_file
+  calc_dsb_use $perf_data_file
+  calc_ifu_switch_penalty $perf_data_file
+}
