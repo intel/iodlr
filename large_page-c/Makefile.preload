@@ -1,0 +1,26 @@
+OUTDIR?=.
+CC=gcc
+CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -z noexecstack -z relro -z now -fstack-protector -Wformat -Wformat-security -Wall -shared -fPIC -DPIC
+AR=ar
+RM=/bin/rm
+EXTRA_CFLAGS?=
+
+.PHONY: all
+all: $(OUTDIR)/liblppreload.so
+
+# Append -DENABLE_LARGE_CODE_PAGES=1 to CFLAGS on supported platforms.
+include ../detect-platform.mk
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -x c -c $< -o $@
+
+OBJECTS=\
+  large_page.o \
+  lp_preload.o \
+
+$(OUTDIR)/liblppreload.so: $(OBJECTS)
+	$(CC) -shared -o $@ $(OBJECTS)
+
+.PHONY: clean
+clean:
+	$(RM) -f *.o $(OUTDIR)/*.a

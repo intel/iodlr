@@ -106,7 +106,6 @@ static map_status FindTextSection(const char* fname, ElfW(Shdr)* text_section) {
 }
 
 static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
-  int idx;
   FindParams* find_params = (FindParams*)data;
   ElfW(Shdr) text_section;
 
