@@ -33,9 +33,6 @@
 #include <linux/limits.h>
 #include <regex.h>
 
-extern char __attribute__((weak))  __textsegment;
-extern char __start_lpstub;
-
 typedef struct {
   void*     from;
   void*     to;
@@ -46,7 +43,7 @@ typedef struct {
   uintptr_t end;
   regex_t regex;
   bool have_regex;
-  uintptr_t start_symbol;
+  map_status status;
 } FindParams;
 
 #define HPS (2L * 1024 * 1024)
@@ -60,9 +57,58 @@ static inline uintptr_t largepage_align_up(uintptr_t addr) {
   return largepage_align_down(addr + HPS - 1);
 }
 
+static map_status FindTextSection(const char* fname, ElfW(Shdr)* text_section) {
+  FILE* bin = fopen(fname, "r");
+  if (bin == NULL) return map_open_exe_failed;
+
+#define CLEAN_EXIT(code)                        \
+  do {                                          \
+    int status = 0;                             \
+    if (errno == 0) {                           \
+      status = fclose(bin);                     \
+    }                                           \
+    return ((((code) == map_ok) && status != 0) \
+      ? map_see_errno_close_exe_failed          \
+      : (code));                                \
+  } while (0)
+
+  // Read the header.
+  ElfW(Ehdr) ehdr;
+  if (fread(&ehdr, sizeof(ehdr), 1, bin) != 1)
+    CLEAN_EXIT(map_read_exe_header_failed);
+
+  // Read the section headers.
+  ElfW(Shdr) shdrs[ehdr.e_shnum];
+  if (fseek(bin, ehdr.e_shoff, SEEK_SET) != 0)
+    CLEAN_EXIT(map_see_errno_seek_exe_sheaders_failed);
+  if (fread(shdrs, sizeof(shdrs[0]), ehdr.e_shnum, bin) != ehdr.e_shnum)
+    CLEAN_EXIT(map_read_exe_sheaders_failed);
+
+  // Read the string table.
+  ElfW(Shdr)* sh_strab = &shdrs[ehdr.e_shstrndx];
+  char section_names[sh_strab->sh_size];
+  if (fseek(bin, sh_strab->sh_offset, SEEK_SET) != 0)
+    CLEAN_EXIT(map_see_errno_seek_exe_string_table_failed);
+  if (fread(section_names, sh_strab->sh_size, 1, bin) != 1)
+    CLEAN_EXIT(map_read_exe_string_table_failed);
+
+  // Find the ".text" section.
+  for (uint32_t idx = 0; idx < ehdr.e_shnum; idx++) {
+    ElfW(Shdr)* sh = &shdrs[idx];
+    if (!memcmp(&section_names[sh->sh_name], ".text", 5)) {
+      *text_section = *sh;
+      CLEAN_EXIT(map_ok);
+    }
+  }
+
+  CLEAN_EXIT(map_region_not_found);
+#undef CLEAN_EXIT
+}
+
 static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
   int idx;
   FindParams* find_params = (FindParams*)data;
+  ElfW(Shdr) text_section;
 
   // We are only interested in the information matching the regex or, if no
   // regex was given, the mapping matching the main executable. This latter
@@ -70,32 +116,16 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
   if ((find_params->have_regex &&
         regexec(&find_params->regex, hdr->dlpi_name, 0, NULL, 0) == 0) ||
       hdr->dlpi_name[0] == 0) {
+    const char* fname = (hdr->dlpi_name[0] == 0 ? "/proc/self/exe" : hdr->dlpi_name);
 
     // Once we have found the info structure for the desired linked-in object,
-    // we iterate over the mappings it lists to see if we can find the one that
-    // is executable that we are interested in.
-    for (idx = 0; idx < hdr->dlpi_phnum; idx++) {
-      const ElfW(Phdr)* phdr = &hdr->dlpi_phdr[idx];
-
-      // This check identifies an executable mapping.
-      if (phdr->p_type == PT_LOAD && phdr->p_flags & PF_X) {
-        uintptr_t start = hdr->dlpi_addr + phdr->p_vaddr;
-        uintptr_t end = start + phdr->p_memsz;
-
-        // If we were given a reference symbol, we perform an additional check
-        // to ensure that we return an executable mapping that contains the
-        // reference symbol because the linked-in object under scrutiny may have
-        // more than one executable mapping.
-        if (find_params->start_symbol != 0 &&
-            (find_params->start_symbol < start ||
-                find_params->start_symbol > end)) {
-          continue;
-        }
-
-        find_params->start = start;
-        find_params->end = end;
-        return 1;
-      }
+    // we open it on disk to find the location of its .text section. We use the
+    // base address given to calculate the .text section offset in memory.
+    find_params->status = FindTextSection(fname, &text_section);
+    if (find_params->status == map_ok) {
+      find_params->start = hdr->dlpi_addr + text_section.sh_addr;
+      find_params->end = find_params->start + text_section.sh_size;
+      return 1;
     }
   }
 
@@ -104,17 +134,9 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
 
 // Identify and return the text region in the currently mapped memory regions.
 static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
-  FindParams find_params = { 0, 0, { 0 }, false, 0 };
+  FindParams find_params = { 0, 0, { 0 }, false, map_region_not_found };
 
-  if (lib_regex == NULL) {
-    // If we have no regex it means that we wish to remap the .text segment of
-    // the main executable, so we must pass a reference symbol to the iterator
-    // in case the main executable has multiple executable segments. The
-    // reference symbol will let the iterator return the executable segment
-    // containing the reference symbol rather than some other executable
-    // segment.
-    find_params.start_symbol = ((uintptr_t)(&__textsegment));
-  } else {
+  if (lib_regex != NULL) {
     if (regcomp(&find_params.regex, lib_regex, 0) != 0) {
       return map_invalid_regex;
     }
@@ -124,30 +146,10 @@ static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
   // We iterate over all the mappings created for the main executable and any of
   // its linked-in dependencies. The return value of `FindMapping` will become
   // the return value of `dl_iterate_phdr`.
-  if (dl_iterate_phdr(FindMapping, &find_params) == 0) {
+  dl_iterate_phdr(FindMapping, &find_params);
+  if (find_params.status != map_ok) {
     regfree(&find_params.regex);
-    return map_region_not_found;
-  }
-
-  if (lib_regex == NULL) {
-    // If we have no regex, we are dealing with the executable segment
-    // containing the executable sections of the main executable itself.
-    uintptr_t lpstub_start = ((uintptr_t)(&__start_lpstub));
-
-    // In the main executable the range that we find may contain more sections
-    // than just .text. Thus, we must use the reference symbol as the start of
-    // the range we wish to remap.
-    find_params.start = find_params.start_symbol;
-
-    // Since we are dealing with the main executable the range that we found may
-    // also contain the `lpstub` section which contains the code responsible for
-    // performing the actual remapping. Since we do not want to remap that
-    // portion of the code, we must adjust the range to exclude the `lpstub`
-    // section. Here we make the assumption that the `lpstub` section is found
-    // after the `.text` section.
-    if (lpstub_start < find_params.end) {
-      find_params.end = lpstub_start;
-    }
+    return find_params.status;
   }
 
   region->from = (void*)find_params.start;
@@ -409,6 +411,18 @@ const char* MapStatusStr(map_status status, bool fulltext) {
       "unmapping of temporary failed",
     "map_unsupported_platform",
       "mapping to large pages is not supported on this platform",
+    "map_open_exe_failed",
+      "opening executable file failed",
+    "map_see_errno_close_exe_failed",
+      "closing executable file failed",
+    "map_see_errno_seek_exe_sheaders_failed",
+      "seeking to executable file section headers failed",
+    "map_read_exe_sheaders_failed",
+      "reading executable file section headers failed",
+    "map_see_errno_seek_exe_string_table_failed",
+      "seeking to executable file string table failed",
+    "map_read_exe_string_table_failed",
+      "reading executable file string table failed"
   };
   return map_status_text[((int)status << 1) + (fulltext & 1)];
 }
