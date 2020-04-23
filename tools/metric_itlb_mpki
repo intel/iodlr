@@ -26,6 +26,10 @@
 SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
+function help_itlb_mpki() {
+	echo "      Measure ITLB misses per Kilo-instruction, for 4k and large (2M/1G) pages."
+}
+
 function init_itlb_mpki() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions itlb_misses.walk_completed itlb_misses.walk_completed_4k itlb_misses.walk_completed_2m_4m itlb_misses.walk_completed_1g)

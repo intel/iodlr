@@ -26,6 +26,10 @@
 SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
+function help_icache_miss_stalls() {
+	echo "      Measure icache stall per instruction metrics."
+}
+
 function init_icache_miss_stalls() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions icache_16b.ifdata_stall

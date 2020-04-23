@@ -27,6 +27,10 @@ SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 echo "ERR: $err_pmus"
 
+function help_dsb_cache() {
+	echo "      Measure front end related data, including MITE, DSB and IFU."
+}
+
 function init_dsb_cache() {
   local local_pmu_array=(idq.dsb_uops idq.ms_uops idq.mite_uops lsd.uops dsb2mite_switches.penalty_cycles cycles)
   local local_pmus

@@ -26,6 +26,10 @@
 SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
+function help_itlb_stalls() {
+	echo "      Measure percentage of cycles where a code fetch is stalled due to L1 instruction cache tag miss."
+}
+
 function init_itlb_stalls() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions icache_64b.iftag_stall)

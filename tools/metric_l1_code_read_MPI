@@ -26,6 +26,10 @@
 SCRIPTS_DIR=`dirname $0`
 source ${SCRIPTS_DIR}/utils.sh
 
+function help_l1_code_read_MPI() {
+	echo "      Measure cache code read (fetch) per-instruction ratio."
+}
+
 function init_l1_code_read_MPI() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions l2_rqsts.all_code_rd)
