@@ -1,9 +1,9 @@
+include cflags.mk
 OUTDIR?=.
 CC=gcc
-CFLAGS=-O3 -D_FORTIFY_SOURCE=2 -z noexecstack -z relro -z now -fstack-protector -Wformat -Wformat-security -Wall -shared -fPIC -DPIC
+CFLAGS=$(CFLAGS_COMMON) -fPIC -DPIC
 AR=ar
 RM=/bin/rm
-EXTRA_CFLAGS?=
 
 .PHONY: all
 all: $(OUTDIR)/liblppreload.so
@@ -12,7 +12,7 @@ all: $(OUTDIR)/liblppreload.so
 include ../detect-platform.mk
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -x c -c $< -o $@
+	$(CC) $(CFLAGS) -x c -c $< -o $@
 
 OBJECTS=\
   large_page.o \
