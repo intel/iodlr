@@ -396,13 +396,21 @@ function collect_perf_data() {
   elif [ "${profile_mode}" == "command" ]; then
     # Check if command_name is given to profile
     echo "--------------------------------------------------"
-    echo "Profiling \"${command_name}\""
+    if [ -n "${app_process_id}" ]; then
+      echo "Profiling \"${command_name}\" against PID $app_process_id"
+    else
+      echo "Profiling \"${command_name}\""
+    fi
     echo "--------------------------------------------------"
 
     print_perf_header
     echo "--------------------------------------------------"
 
-    perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} ${command_name}
+    if [ -n "${app_process_id}" ]; then
+      perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} -p $app_process_id ${command_name}
+    else
+      perf ${perf_mode} -o ${PERF_DATA_FILE} -e ${PERF_PMUS} ${command_name}
+    fi
     if [ $? != 0 ]; then
      echo "Perf for $command_name failed. Exiting"
      exit
