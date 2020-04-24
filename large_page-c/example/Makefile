@@ -36,14 +36,14 @@ large_page_example: $(LARGE_PAGE_EXAMPLE_DEPS)
 $(OBJDIR)/liblarge_page.a:
 	$(MAKE) -C .. OUTDIR=$(OBJDIR)
 
-$(OBJDIR)/%.o : %.c
+$(OBJDIR)/%.o : %.c $(OBJDIR)
 	$(CC) $(CFLAGS) -x c -o $@ -c -I.. $<
 
 $(OBJS): | $(OBJDIR)
 
 $(OBJDIR):
-	@mkdir -p $(OBJDIR)
+	mkdir -p $(OBJDIR)
 
 clean:
 	$(MAKE) -C .. OUTDIR=$(OBJDIR) clean
-	@rm -rf $(OBJDIR) large_page_example
+	rm -rf $(OBJDIR) large_page_example
