@@ -47,7 +47,6 @@ typedef struct {
 } FindParams;
 
 #define HPS (2L * 1024 * 1024)
-#define SAFE_DEL(p, func) {if (p) { func(p); p = NULL; }}
 
 static inline uintptr_t largepage_align_down(uintptr_t addr) {
   return (addr & ~(HPS - 1));
