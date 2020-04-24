@@ -23,4 +23,4 @@ $(OUTDIR)/liblppreload.so: $(OBJECTS)
 
 .PHONY: clean
 clean:
-	$(RM) -f *.o $(OUTDIR)/*.a
+	$(RM) -f *.o $(OUTDIR)/*.so
