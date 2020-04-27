@@ -34,6 +34,7 @@ function init_icache_miss_stalls() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions icache_16b.ifdata_stall
           "cpu/event=0x80,umask=0x4,cmask=1,edge=1,name=iicache_16b.ifdata_stall:c1:e1/")
+  local local_pmus
   for item in ${local_pmu_array[*]}
   do
     if [ "x${local_pmus}" == "x" ]; then

@@ -33,6 +33,7 @@ function help_itlb_mpki() {
 function init_itlb_mpki() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions itlb_misses.walk_completed itlb_misses.walk_completed_4k itlb_misses.walk_completed_2m_4m itlb_misses.walk_completed_1g)
+  local local_pmus
   for item in ${local_pmu_array[*]}
   do
     if [ "x${local_pmus}" == "x" ]; then

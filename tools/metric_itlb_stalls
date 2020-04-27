@@ -33,6 +33,7 @@ function help_itlb_stalls() {
 function init_itlb_stalls() {
   #Comma seperated perf supported counter names. See example below"
   local local_pmu_array=(instructions icache_64b.iftag_stall)
+  local local_pmus
   for item in ${local_pmu_array[*]}
   do
     if [ "x${local_pmus}" == "x" ]; then

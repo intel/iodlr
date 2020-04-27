@@ -32,6 +32,7 @@ function help_l2_demand_code_MPI() {
 
 function init_l2_demand_code_MPI() {
   local local_pmu_array=(instructions l2_rqsts.code_rd_miss)
+  local local_pmus
   for item in ${local_pmu_array[*]}
   do
     if [ "x${local_pmus}" == "x" ]; then
