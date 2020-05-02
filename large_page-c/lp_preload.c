@@ -24,5 +24,4 @@ fail:
             "Mapping to large pages failed: %s\n",
             MapStatusStr(status, true));
   }
-  abort();
 }
