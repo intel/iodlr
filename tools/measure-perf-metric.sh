@@ -58,15 +58,13 @@ PERF_PMUS=""
 #####################################################################
 function print_metric_array() {
   if [ $debug_mode -eq 1 ]; then
-    local idx=0
     for item in ${metric_array[*]}
     do
       local mod_item=$item
       if [ "${default_metric_name}" == "$item" ]; then
         mod_item="$item [Default]"
       fi
-      echo "    $idx) $mod_item"
-      idx=`expr $idx + 1`
+      echo "    - $mod_item"
     done
   fi
 }
