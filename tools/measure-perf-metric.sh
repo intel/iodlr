@@ -65,6 +65,9 @@ function print_metric_array() {
         mod_item="$item [Default]"
       fi
       echo "    - $mod_item"
+      local help_func="help_${item}"
+      local type=`type -t $help_func`
+      [ "$type" == "function" ] && $help_func
     done
   fi
 }
