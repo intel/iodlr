@@ -2,13 +2,7 @@ CC=gcc
 CFLAGS?=-O3
 OBJDIR=$(shell realpath obj)
 
-# align.o must be the first in the list of object files because it must be the
-# first item passed to the linker. This will ensure that the text section will
-# start at a 2 MiB offset, thus avoiding a scenario where too large a portion of
-# it gets snipped off by the necessity that the region getting remapped to large
-# pages must start at a 2 MiB boundary.
 OBJFILES=              \
-  align.o              \
   large_page_example.o \
   filler1.o            \
   filler2.o            \
@@ -42,17 +36,14 @@ large_page_example: $(LARGE_PAGE_EXAMPLE_DEPS)
 $(OBJDIR)/liblarge_page.a:
 	$(MAKE) -C .. OUTDIR=$(OBJDIR)
 
-$(OBJDIR)/align.o : align.S
-	gcc -c -o $@ $<
-
-$(OBJDIR)/%.o : %.c
+$(OBJDIR)/%.o : %.c $(OBJDIR)
 	$(CC) $(CFLAGS) -x c -o $@ -c -I.. $<
 
 $(OBJS): | $(OBJDIR)
 
 $(OBJDIR):
-	@mkdir -p $(OBJDIR)
+	mkdir -p $(OBJDIR)
 
 clean:
 	$(MAKE) -C .. OUTDIR=$(OBJDIR) clean
-	@rm -rf $(OBJDIR) large_page_example
+	rm -rf $(OBJDIR) large_page_example

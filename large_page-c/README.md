@@ -1,9 +1,13 @@
 # Reference Implementation for Utilizing Large Pages
 
 This directory contains a reference implementation for automating the process
-of utilizing transparent huge pages.
+of re-mapping code to transparent huge pages. It contains a target for building
+a static library that can be used along with the header files in a larger
+project, and a target for building a shared library that can be loaded into a
+process using `LD_PRELOAD`, at which point it will re-map the `.text` segment of
+the executable.
 
-## Building
+## Building The Static Library
 
 The APIs provided by the reference implementation can be built into a static
 library by running
@@ -11,6 +15,95 @@ library by running
 ```bash
 make
 ```
+
+This will create `liblarge_page.a` in the current directory.
+
+## Building The Shared Library
+
+The shared library can be built by running
+
+```bash
+make -f Makefile.preload
+```
+
+This will create `liblppreload.so` in the current directory. This file should
+then be copied to `/usr/lib64`.
+
+### Using The Shared Library
+
+`liblppreload.so` can be added to any process on the command line. The example
+below illustrates the use of the shared library with Node.js:
+
+```bash
+LD_PRELOAD=/usr/lib64/liblppreload.so node
+```
+
+### Modifying A `systemd` Service
+
+`systemd` service files are responsible for running processes as daemons during
+startup. They are usually located in `/etc/systemd/system`. They consist of
+several sections, including a section named `[Service]`. In this section
+environment variables are specified which will be set during the execution of
+the processes listed in the file. An environment variable can be added to this
+section as follows:
+
+```
+[Service]
+Environment=LD_PRELOAD=/usr/lib64/liblppreload.so
+```
+
+After this modification is made, `systemd` must be instructed to reload its
+configuration and the corresponding daemon must be restarted. The `systemd`
+configuration can be reloaded by issuing
+
+```
+systemctl daemon-reload
+```
+as root.
+
+Afterwards the daemon whose `.service` file was modified can be restarted by
+issuing
+
+```
+systemctl restart <daemon>
+```
+
+as root, where `<daemon>` is the name of the daemon whose service file was
+modified.
+
+**NOTE:** Since `liblppreload.so` is added onto the daemon process, it is unable
+to use whatever logging facilities the process may have. If it fails to re-map
+the process' code to large pages, it will issue an error on `stderr`. The daemon
+should be run from the command line without forking into the background in order
+to determine any potential problems with the re-mapping. Taking `mysqld` as an
+example, running
+
+```
+LD_PRELOAD=/usr/lib/liblppreload.so mysqld --help
+```
+
+will reveal any issues related to re-mapping the code.
+
+Examining the daemon's `/proc/<pid>/smaps` file can be used as a final check to
+ensure that the code was re-mapped to large pages. See the [smaps][]
+documentation for details about the format of `/proc/<pid>/smaps`. Taking
+`mysqld` as an example, its pid can be obtained by running
+
+```bash
+$ ps ax | grep mysqld
+ 32732 pts/7    S+     0:00 grep --color=auto mysqld
+ 44982 ?        Ssl  254:44 /usr/sbin/mysqld
+```
+
+This reveals that `44982` is `mysqld`'s pid. Running
+
+```bash
+less /proc/44982/smaps
+```
+
+and looking for `AnonHugePages` will reveal whether any portion of
+`/usr/sbin/mysqld`'s code was re-mapped to large pages, because the number
+appearing after `AnonHugePages` will be non-zero.
 
 ## API
 
@@ -21,14 +114,10 @@ make
 ```C
 typedef enum {
   map_ok,
-  map_exe_path_read_failed,
   map_failed_to_open_thp_file,
   map_invalid_regex,
   map_invalid_region_address,
   map_malformed_thp_file,
-  map_malformed_maps_file,
-  map_maps_open_failed,
-  map_mover_overlaps,
   map_null_regex,
   map_region_not_found,
   map_region_too_small,
@@ -44,6 +133,14 @@ typedef enum {
   map_see_errno_mprotect_munmaps_failed,
   map_see_errno_mprotect_munmap_tmem_failed,
   map_see_errno_munmap_nmem_failed,
+  map_unsupported_platform,
+  map_open_exe_failed,
+  map_see_errno_close_exe_failed,
+  map_read_exe_header_failed,
+  map_see_errno_seek_exe_sheaders_failed,
+  map_read_exe_sheaders_failed,
+  map_see_errno_seek_exe_string_table_failed,
+  map_read_exe_string_table_failed,
 } map_status;
 ```
 
@@ -142,3 +239,5 @@ message.
 message (`false`)
 - **Returns**: A string containing the textual error message. The string is owned by
 the implementation and must not be freed.
+
+[smaps]: https://github.com/torvalds/linux/blob/v5.6/Documentation/filesystems/proc.txt#L421

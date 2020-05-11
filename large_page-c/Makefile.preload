@@ -1,13 +1,12 @@
 include cflags.mk
-
 OUTDIR?=.
 CC=gcc
-CFLAGS+=$(CFLAGS_COMMON)
+CFLAGS=$(CFLAGS_COMMON) -fPIC -DPIC
 AR=ar
 RM=/bin/rm
 
 .PHONY: all
-all: $(OUTDIR)/liblarge_page.a
+all: $(OUTDIR)/liblppreload.so
 
 # Append -DENABLE_LARGE_CODE_PAGES=1 to CFLAGS on supported platforms.
 include ../detect-platform.mk
@@ -15,9 +14,13 @@ include ../detect-platform.mk
 %.o: %.c
 	$(CC) $(CFLAGS) -x c -c $< -o $@
 
-$(OUTDIR)/liblarge_page.a: large_page.o
-	$(AR) rcs $@ $<
+OBJECTS=\
+  large_page.o \
+  lp_preload.o \
+
+$(OUTDIR)/liblppreload.so: $(OBJECTS)
+	$(CC) -shared -o $@ $(OBJECTS)
 
 .PHONY: clean
 clean:
-	$(RM) -f *.o $(OUTDIR)/*.a
+	$(RM) -f *.o $(OUTDIR)/*.so
