@@ -52,6 +52,10 @@ section as follows:
 Environment=LD_PRELOAD=/usr/lib64/liblppreload.so
 ```
 
+Note that the location of `liblppreload.so` should be a system library path
+(`/usr/lib64` in the above example) otherwise `systemd` may refuse to load the
+library.
+
 After this modification is made, `systemd` must be instructed to reload its
 configuration and the corresponding daemon must be restarted. The `systemd`
 configuration can be reloaded by issuing
@@ -79,7 +83,7 @@ to determine any potential problems with the re-mapping. Taking `mysqld` as an
 example, running
 
 ```
-LD_PRELOAD=/usr/lib/liblppreload.so mysqld --help
+LD_PRELOAD=/usr/lib64/liblppreload.so mysqld --help
 ```
 
 will reveal any issues related to re-mapping the code.
