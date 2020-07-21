@@ -20,11 +20,46 @@
 //
 // SPDX-License-Identifier: MIT
 
-#ifndef LARGE_PAGE_H
-#define LARGE_PAGE_H
+#ifndef LARGE_PAGE_H_
+#define LARGE_PAGE_H_
 
-int MapStaticCodeToLargePages();
-int MapStaticCodeToLargePages(char* from, char* to);
-bool IsLargePagesEnabled();
+#include <string>
 
-#endif  // LARGE_PAGE_H:
+namespace largepage {
+    using std::string;
+
+    enum MapStatus {
+        map_ok,
+        map_exe_path_read_failed,
+        map_failed_to_open_thp_file,
+        map_invalid_regex,
+        map_invalid_region_address,
+        map_malformed_thp_file,
+        map_malformed_maps_file,
+        map_maps_open_failed,
+        map_mover_overlaps,
+        map_null_regex,
+        map_region_not_found,
+        map_region_too_small,
+        map_see_errno,
+        map_see_errno_madvise_tmem_failed,
+        map_see_errno_madvise_tmem_munmap_nmem_failed,
+        map_see_errno_madvise_tmem_munmaps_failed,
+        map_see_errno_madvise_tmem_munmap_tmem_failed,
+        map_see_errno_mmap_tmem_failed,
+        map_see_errno_mmap_tmem_munmap_nmem_failed,
+        map_see_errno_mprotect_failed,
+        map_see_errno_mprotect_munmap_nmem_failed,
+        map_see_errno_mprotect_munmaps_failed,
+        map_see_errno_mprotect_munmap_tmem_failed,
+        map_see_errno_munmap_nmem_failed,
+        map_unsupported_platform,
+    };
+
+    MapStatus MapStaticCodeToLargePages(const std::string& regexpr = "");
+    MapStatus MapStaticCodeToLargePages(void* from, void* to);
+    MapStatus IsLargePagesEnabled(bool* result);
+    const string& MapStatusStr(MapStatus status, bool fulltext = true);
+};  // namespace largepage
+
+#endif  // LARGE_PAGE_H_
