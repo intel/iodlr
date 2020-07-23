@@ -101,11 +101,10 @@ uint64_t iodlr_procmeminfo(string key) {
 
 bool iodlr_hp_enabled() {
     uint64_t val = iodlr_procmeminfo("HugePages_Total:");
-    if (val == 0 )
-        return false;
-    else if (val > 0)
+    if (val > 0 )
         return true;
-    return false;
+    else 
+        return false;
 }
 
 size_t iodlr_get_hp_size() {
@@ -118,14 +117,12 @@ size_t iodlr_get_hp_size() {
 
 
 void * iodlr_allocate(size_t s, size_t pgsz) {
-    int flags=0;
+    int flags=FLAGS_4K;
     void *data;
     if (pgsz ==  1048576* 1024)
        flags = FLAGS_1G;
     else if (pgsz == 2048*1024)
        flags = FLAGS_2M;
-    else
-        flags = FLAGS_4K;
 
     data = mmap(NULL, s,
                          PROT_READ | PROT_WRITE, flags,

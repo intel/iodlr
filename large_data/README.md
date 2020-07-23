@@ -44,15 +44,24 @@ Hugepagesize:       1048676 kB
 The nonempty command output indicates that large page support is present, but the zero values indicate that no pages are configured for use. Also the kernel is configured to use 1GB pages
 
 Set the number of pages to be used.
-Each page is 1GB, so a value of 20 = 40GB.
-This command actually allocates memory, so this much # memory must be available.
+Each page is 1GB, so a value of 8 = 8GB.
+This command actually allocates memory, so this much amount of memory must be available.
 ```
-echo 20 > /proc/sys/vm/nr_hugepages
+echo 8 > /proc/sys/vm/nr_hugepages
 ``` 
 
-
-
-# Building :
+# Building
 ```
   make
+```
+
+# Testing
+This test needs 8G memory and for the hptest it needs 8 * 1G pages or 4096 * 2MB pages allocated as hugepages (using `nr_hugepages`)
+```
+./data-large-reference 
+hptest hpsize 2097152
+Cycles for 2097152 = 4918657468
+defaulttest default pagesize 4096
+Cycles for 4096 = 10988167648
+Huge Page Data Speedup = 2.23398
 ```
