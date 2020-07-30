@@ -90,7 +90,6 @@ uint64_t iodlr_procmeminfo(string key) {
         iss >> keyname;
         iss >> value;
         iss >> kb;
-//        cout << keyname << " " << value << "\n";
         if (keyname == key) {
                 return value;
         }

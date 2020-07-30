@@ -13,10 +13,6 @@ of utilizing explicit huge pages for Data.
 * void * iodlr_allocate(size_t s, size_t pgsz)
   mmap size bytes with pgsz
 * void iodlr_deallocate(char *d, size_t s)
-  unmap
-* int MapStaticCodeToLargePages(hotstart, hotend)
-  Map region from hotstart to hotend to 2MB pages
-  Returns -1 if an error occurs while mapping
 ```
 
 # Test
@@ -32,7 +28,7 @@ of utilizing explicit huge pages for Data.
 
 # Infrastructure
 
-The Linux kernel in modern distros has large pages feature enabled by default. To check whether this is true for your kernel, use the following command and look for output lines containing “huge”:
+The Linux kernel in modern distros has the large pages feature enabled by default. To check whether this is true for your kernel, use the following command and look for output lines containing “huge”:
 ```
 shell> cat /proc/meminfo | grep -i huge
 HugePages_Total:       0
@@ -45,7 +41,7 @@ The nonempty command output indicates that large page support is present, but th
 
 Set the number of pages to be used.
 Each page is 1GB, so a value of 8 = 8GB.
-This command actually allocates memory, so this much amount of memory must be available.
+This command actually allocates memory, so the requested amount of memory must be available.
 ```
 echo 8 > /proc/sys/vm/nr_hugepages
 ``` 
