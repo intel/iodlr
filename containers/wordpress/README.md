@@ -31,8 +31,8 @@ a baseline. The following modifications were made to wp_base in addition to cont
   * NUMA optimization/multi instance (must be done via pinning, see below)
     * Note that for NUMA optimization/pinning you may do this with the base container if you wish to isolate this optimization.
 
-Note that in order to run a baseline across multiple sockets, you will need to utilize the 1s-bkm.js file in the base user 
-directory in the container you wish to run (likely base).  Copy the file over the current my.cnf as shown in the dockerfile.  
+Note that in order to run a baseline across multiple sockets, you will need to utilize the 1s-bkm.js file in the base user
+directory in the container you wish to run (likely base).  Copy the file over the current my.cnf as shown in the dockerfile.
 This will disable mysql query cache for an appropriate baseline across multiple sockets.
 
 ## Building
@@ -88,6 +88,26 @@ lscpu
 The command will list lcpu ids corresponding to cores on each NUMA node.
 Then you must use cpuset-cpus and cpuset-mems flags in docker run to ensure each
 instance is running on a single NUMA node.
+
+### Automatic script
+
+An alternative way to execute the workload is use run.sh script, which will launch the workload and
+calculate the total TPS (transactions per second).
+Below example shows it run 6 instances of wp_base_http image with NUMA pinning.
+```
+$ ./run.sh --image wp_base_http --count 6 --numa-pinning
+-------------------------------------------------------------
+Creating temporary directory /tmp/run-DHzZTK85da for logfile.
+
+-------------------------------------------------------------
+Running 6 wp_base_http instance(s) with NUMA pinning.
+...
+-------------------------------------------------------------
+All instances are completed.
+-------------------------------------------------------------
+TPS of 6 instances: 651.84 674.47 658.42 658.87 683.32 682.32
+Total TPS: 4009.24
+```
 
 ## Known issues
 
