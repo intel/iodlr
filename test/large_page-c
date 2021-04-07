@@ -1,0 +1,29 @@
+#!/bin/sh
+
+REPO_ROOT=$1
+if test "x${REPO_ROOT}x" = "xx"; then
+  echo "Usage: $0 <repo root>"
+  exit 1
+fi
+
+echo $'\n** Testing the C implementation'
+
+. "${REPO_ROOT}/test/lib/utils.sh"
+
+MAKE=$(get_make)
+
+cd ${REPO_ROOT}/large_page-c/example
+
+echo "*** Testing output for default setup"
+${MAKE} || die "make failed for default setup" 2
+test_stdout                                     \
+  ./large_page_example                          \
+  ${REPO_ROOT}/test/large_page-c.d/default_stdout || die "" 3
+${MAKE} clean || die "make clean failed for default setup" 4
+
+echo "*** Testing output for unsupported setup"
+${MAKE} ENABLE_LARGE_CODE_PAGES=0 || die "make failed for unsupported setup"
+test_stdout                                     \
+  ./large_page_example                          \
+  ${REPO_ROOT}/test/large_page-c.d/unsupported_stdout || die "" 5
+${MAKE} clean || die "make clean failed for unsupported setup" 6

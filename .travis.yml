@@ -1,0 +1,12 @@
+language: cpp
+
+matrix:
+  fast_finish: true
+  include:
+  - env:
+    os: linux
+#  - env:
+#    os: osx
+
+script:
+- ./test.sh

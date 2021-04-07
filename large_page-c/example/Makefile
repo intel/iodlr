@@ -12,14 +12,6 @@ OBJFILES=              \
   filler6.o            \
   filler7.o            \
   filler8.o            \
-  filler9.o            \
-  filler10.o           \
-  filler11.o           \
-  filler12.o           \
-  filler13.o           \
-  filler14.o           \
-  filler15.o           \
-  filler16.o           \
 
 OBJS=$(addprefix $(OBJDIR)/,$(OBJFILES))
 
