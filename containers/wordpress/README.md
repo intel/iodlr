@@ -21,10 +21,10 @@ https://opensource.org/licenses/MIT
 
 To accomplish this goal, we have built two containers: wp_base and wp_opt.
 
-* wp_base_http contains the bare minimum needed to execute the workload and establish
+* wp4.2_php7.4_base_querycacheoff_http contains the bare minimum needed to execute the workload and establish
 a baseline. The following modifications were made to wp_base in addition to containerization:
   * php-fpm7.4
-* wp_opt_http is build upon wp_base_http and has the following additions
+* wp4.2_php7.4_opt_querycacheon_http is build upon wp_base_http and has the following additions
   * BOLTing of PHP
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
@@ -61,8 +61,8 @@ sudo docker image ls
 Example output:
 
 ```
-wp_opt_http          latest              3b250734600c        2 minutes ago       1.66GB
-wp_base_http         latest              56decbd76dc6        3 minutes ago       1.62GB
+wp4.2_php7.4_opt_querycacheon_http          latest              3b250734600c        2 minutes ago       1.66GB
+wp4.2_php7.4_base_querycacheoff_http        latest              56decbd76dc6        3 minutes ago       1.62GB
 ```
 
 ## Executing the workload
