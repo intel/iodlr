@@ -1,4 +1,3 @@
-# Copyright (C) 2021 Intel Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files
@@ -20,24 +19,22 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
-version: "3.3"
-services:
-  wp4.2_php7.4_base_http:
-    build: 
-      context: ./wp_base/http
-      dockerfile: Dockerfile
-    image: wp4.2_php7.4_base_querycacheoff_http
-  wp4.2_php7.4_opt_http:
-    build:
-      context: ./wp_opt
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-    image: wp4.2_php7.4_opt_querycacheon_http
-  wp5.2_php7.4_base_http:
-    build: 
-      context: ./wp5.2_base/http
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-    image: wp5.2_php7.4_base_querycacheoff_http
+ARG baseimage=wp_base
+FROM $baseimage
+LABEL authors="bun.k.tan@intel.com"
+
+WORKDIR /home/${USERNAME}/oss-performance
+
+# Checkout commit in oss-performance with wordpress 5.2 support
+RUN git checkout 0026641
+
+WORKDIR /home/${USERNAME}/oss-performance/targets/wordpress
+
+# Download WP5.2, change the WP target from 4.2 to 5.2, replace WP4.2 database dump with WP5.2, and change URLs list, remove WP4.2
+RUN wget https://wordpress.org/wordpress-5.2.tar.gz && \
+    sed -i 's/4.2.0/5.2/g' WordpressTarget.php && \
+    mv WordpressTarget_v5.urls WordpressTarget.urls && \
+    mv dbdump_v5.sql.gz dbdump.sql.gz && \
+    rm wordpress-4.2.0.tar.gz
+
+WORKDIR /home/${USERNAME}/oss-performance
