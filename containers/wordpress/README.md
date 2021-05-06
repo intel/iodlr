@@ -19,7 +19,7 @@ https://opensource.org/licenses/MIT
 
 ## Containers
 
-To accomplish this goal, we have built three containers: wp_base, wp_opt, and wp5.2_base.
+To accomplish this goal, we have built four containers: wp_base, wp_opt, wp5.2_base, and wp5.2_opt.
 
 * wp4.2_php7.4_base_querycacheoff_http contains the bare minimum needed to execute WordPress 4.2 / PHP7.4 and establish
 a baseline. The following modifications were made to wp_base in addition to containerization:
@@ -30,7 +30,8 @@ a baseline. The following modifications were made to wp_base in addition to cont
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)
     * Note that for NUMA optimization/pinning you may do this with the base container if you wish to isolate this optimization.
-* wp5.2_base_http builds wp4.2_php7.4_base_querycacheoff_http, but uses WordPress 5.2 and its associated database dump and URLs.  
+* wp5.2_php7.4_base_querycacheoff_http builds upon wp4.2_php7.4_base_querycacheoff_http, but uses WordPress 5.2 and its associated database dump and URLs.  
+* wp5.2_php7.4_opt_querycacheon_http builds upon wp4.2_php7.4_opt_querycacheon_http, but uses WordPress 5.2 and its associated database dump and URLs.  
 
 Note that in order to run a baseline across multiple sockets, you will need to utilize the 1s-bkm.js file in the base user
 directory in the container you wish to run (likely base).  Copy the file over the current my.cnf as shown in the dockerfile.
