@@ -34,6 +34,14 @@ services:
       args:
           baseimage: wp4.2_php7.4_base_querycacheoff_http
     image: wp4.2_php7.4_opt_querycacheon_http
+  wp4.2_php7.4_opt_querycacheoff_1_instance_only_http:
+    build:
+      context: ./wp_opt
+      dockerfile: Dockerfile
+      args:
+          baseimage: wp4.2_php7.4_base_querycacheoff_http
+          mariadbconf: 2s
+    image: wp4.2_php7.4_opt_querycacheoff_1_instance_only_http
   wp5.2_php7.4_base_querycacheoff_http:
     build: 
       context: ./wp5.2_base/http
@@ -48,3 +56,10 @@ services:
       args:
           baseimage: wp4.2_php7.4_opt_querycacheon_http
     image: wp5.2_php7.4_opt_querycacheon_http
+  wp5.2_php7.4_opt_querycacheoff_1_instance_only_http:
+    build: 
+      context: ./wp5.2_opt/http
+      dockerfile: Dockerfile
+      args:
+          baseimage: wp4.2_php7.4_opt_querycacheoff_1_instance_only_http
+    image: wp5.2_php7.4_opt_querycacheoff_1_instance_only_http
