@@ -27,16 +27,37 @@ services:
       context: ./wp_base/http
       dockerfile: Dockerfile
     image: wp4.2_php7.4_base_querycacheoff_http
+  wp4.2_php7.4_base_querycacheoff_https:
+    build:
+      context: ./wp_base/https
+      dockerfile: Dockerfile
+      args:
+          baseimage: wp4.2_php7.4_base_querycacheoff_http
+    image: wp4.2_php7.4_base_querycacheoff_https
   wp4.2_php7.4_opt_querycacheon_http:
     build:
-      context: ./wp_opt
+      context: ./wp_opt/http
       dockerfile: Dockerfile
       args:
           baseimage: wp4.2_php7.4_base_querycacheoff_http
     image: wp4.2_php7.4_opt_querycacheon_http
+  wp4.2_php7.4_opt_querycacheon_with_https:
+    build:
+      context: ./wp_base/https
+      dockerfile: Dockerfile
+      args:
+          baseimage: wp4.2_php7.4_opt_querycacheon_http
+    image: wp4.2_php7.4_opt_querycacheon_with_https
+  wp4.2_php7.4_opt_querycache_on_https_opt:
+    build:
+      context: ./wp_opt/https
+      dockerfile: Dockerfile
+      args:
+          baseimage: wp4.2_php7.4_opt_querycacheon_with_https
+    image: wp4.2_php7.4_opt_querycacheon_https_opt
   wp4.2_php7.4_opt_querycacheoff_1_instance_only_http:
     build:
-      context: ./wp_opt
+      context: ./wp_opt/http
       dockerfile: Dockerfile
       args:
           baseimage: wp4.2_php7.4_base_querycacheoff_http
