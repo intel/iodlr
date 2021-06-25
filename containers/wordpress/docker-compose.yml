@@ -47,13 +47,13 @@ services:
       dockerfile: Dockerfile
       args:
           baseimage: wp4.2_php7.4_opt_querycacheon_http
-    image: wp4.2_php7.4_opt_querycacheon_with_https
+    image: wp4.2_php7.4_opt_querycacheon_httpbolt_with_https
   wp4.2_php7.4_opt_querycache_on_https_opt:
     build:
       context: ./wp_opt/https
       dockerfile: Dockerfile
       args:
-          baseimage: wp4.2_php7.4_opt_querycacheon_with_https
+          baseimage: wp4.2_php7.4_opt_querycacheon_httpbolt_with_https
     image: wp4.2_php7.4_opt_querycacheon_https_opt
   wp4.2_php7.4_opt_querycacheoff_1_instance_only_http:
     build:

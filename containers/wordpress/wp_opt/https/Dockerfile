@@ -3,6 +3,12 @@ FROM $baseimage
 
 LABEL authors="nitin.tekchandani@intel.com,lin.a.yang@intel.com,uttam.c.pawar@intel.com"
 
+# Bolt with https fdata
+WORKDIR /home/${USERNAME}/oss-performance
+COPY files/perf.fdata /home/${USERNAME}/oss-performance
+RUN rm ./php-fpm.bolt
+RUN ./llvm-bolt ./php-fpm -o ./php-fpm.bolt -data=perf.fdata -reorder-blocks=cache+ -reorder-functions=hfsort+ -split-functions=3 -split-all-cold -split-eh -dyno-stats
+
 USER root
 
 RUN apt-get update && \
