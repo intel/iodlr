@@ -55,5 +55,7 @@ RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
     make -j && \
     make install 
 
+WORKDIR /home/${USERNAME}/oss-performance
+
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
 USER ${USERNAME}

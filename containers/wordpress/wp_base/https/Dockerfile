@@ -65,19 +65,22 @@ RUN ./configure --with-ssl=/usr/bin/openssl && \
 WORKDIR /home/${USERNAME}
 RUN rm -rf ./siege-4.0.9
 
+WORKDIR /home/${USERNAME}/oss-performance
+
 # Modify WordPressTarget urls for https
 RUN sed -i 's/http/https/' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.urls
 
 # Temporary fix
 RUN sed -i ':currentline;N;$!bcurrentline;s/invariant.*);//g' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.php
 
-USER ${USERNAME}
-WORKDIR /home/${USERNAME}/oss-performance
-
 # Patch https into oss-performance
 COPY --chown=${USERNAME}:root files/https_oss_performance.patch /home/${USERNAME}/oss-performance
+COPY --chown=${USERNAME}:root files/update_nginx_workers.sh /usr/local/bin/update_nginx_workers.sh
 RUN git apply https_oss_performance.patch
 
+RUN sed -r --expression='s/(exec "\$\@")/\/usr\/local\/bin\/update_nginx_workers\.sh\n\1/g' -i /usr/local/bin/entrypoint.sh
+ 
 COPY --chown=${USERNAME}:root files/ssl-params.conf /home/${USERNAME}/certificates/ssl
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
 
+USER ${USERNAME}
