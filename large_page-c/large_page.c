@@ -113,7 +113,7 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
   // mapping has the empty string for a name.
   if ((find_params->have_regex &&
         regexec(&find_params->regex, hdr->dlpi_name, 0, NULL, 0) == 0) ||
-      hdr->dlpi_name[0] == 0) {
+      (hdr->dlpi_name[0] == 0 && !find_params->have_regex)) {
     const char* fname = (hdr->dlpi_name[0] == 0 ? "/proc/self/exe" : hdr->dlpi_name);
 
     // Once we have found the info structure for the desired linked-in object,
