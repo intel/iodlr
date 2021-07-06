@@ -287,11 +287,11 @@ static void AlignRegionToPageBoundary(mem_range* r) {
 }
 
 static map_status CheckMemRange(mem_range* r) {
-  if (r->from == NULL || r->to == NULL || r->from > r->to) {
+  if (r->from == NULL || r->to == NULL) {
     return map_invalid_region_address;
   }
 
-  if (r->to - r->from < HPS) {
+  if (r->to - r->from < HPS || r->from > r->to) {
     return map_region_too_small;
   }
 
