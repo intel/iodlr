@@ -38,6 +38,14 @@ below illustrates the use of the shared library with Node.js:
 LD_PRELOAD=/usr/lib64/liblppreload.so node
 ```
 
+If you want to exclude some libraries from being moved to large pages use `LP_IGNORE`
+parameter which is a regex string to specify which libraries to ignore. An example
+ignoring libc and libabc:
+
+```bash
+LD_PRELOAD=/usr/lib64/liblppreload.so LP_IGNORE='(libc)|(libabc)' node
+```
+
 ### Modifying A `systemd` Service
 
 `systemd` service files are responsible for running processes as daemons during
