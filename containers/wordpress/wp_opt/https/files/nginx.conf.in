@@ -1,7 +1,21 @@
 worker_processes  96; # Depends on #vcpus
 
+load_module /home/base/nginx_install/modules/ngx_ssl_engine_qat_module.so;
+
 error_log __NGINX_TEMP_DIR__/nginx-error.log;
 pid __NGINX_PID_FILE__;
+
+
+ssl_engine{
+   use_engine qatengine;
+   default_algorithms ALL;
+   qat_engine{
+      qat_notify_mode poll;
+      qat_offload_mode async;
+      qat_external_poll_interval 1;
+   }
+}
+
 
 worker_rlimit_nofile 1000000;
 
