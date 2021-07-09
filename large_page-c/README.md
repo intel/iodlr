@@ -5,7 +5,7 @@ of re-mapping code to transparent huge pages. It contains a target for building
 a static library that can be used along with the header files in a larger
 project, and a target for building a shared library that can be loaded into a
 process using `LD_PRELOAD`, at which point it will re-map the `.text` segment of
-the executable.
+the executable and dependent shared libraries.
 
 ## Building The Static Library
 
