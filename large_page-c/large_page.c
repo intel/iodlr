@@ -113,7 +113,7 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
   // mapping has the empty string for a name.
   if ((find_params->have_regex &&
         regexec(&find_params->regex, hdr->dlpi_name, 0, NULL, 0) == 0) ||
-      hdr->dlpi_name[0] == 0) {
+      (hdr->dlpi_name[0] == 0 && !find_params->have_regex)) {
     const char* fname = (hdr->dlpi_name[0] == 0 ? "/proc/self/exe" : hdr->dlpi_name);
 
     // Once we have found the info structure for the desired linked-in object,
@@ -287,11 +287,11 @@ static void AlignRegionToPageBoundary(mem_range* r) {
 }
 
 static map_status CheckMemRange(mem_range* r) {
-  if (r->from == NULL || r->to == NULL || r->from > r->to) {
+  if (r->from == NULL || r->to == NULL) {
     return map_invalid_region_address;
   }
 
-  if (r->to - r->from < HPS) {
+  if (r->to - r->from < HPS || r->from > r->to) {
     return map_region_too_small;
   }
 
