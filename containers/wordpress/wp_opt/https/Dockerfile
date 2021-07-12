@@ -3,6 +3,10 @@ FROM $baseimage
 
 LABEL authors="nitin.tekchandani@intel.com,lin.a.yang@intel.com,uttam.c.pawar@intel.com"
 
+ARG IPP_CRYPTO_TAG=ippcp_2021.3
+ARG QAT_ENGINE_TAG=v0.6.1
+ARG ASYNCH_NGINX_TAG=v0.4.3
+
 # Bolt with https fdata
 WORKDIR /home/${USERNAME}/oss-performance
 COPY files/perf.fdata /home/${USERNAME}/oss-performance
@@ -18,7 +22,7 @@ RUN apt-get update && \
 WORKDIR /home/${USERNAME}/temp
 RUN git clone https://github.com/intel/ipp-crypto.git && \
     cd ipp-crypto && \
-    git checkout master && \
+    git checkout $IPP_CRYPTO_TAG && \
     cd sources/ippcp/crypto_mb && \
     CXX=g++-9 CC=gcc-9 cmake . -B./build -DOPENSSL_INCLUDE_DIR=/home/${USERNAME}/openssl_install/include/ -DOPENSSL_LIBRARIES=/home/${USERNAME}/openssl_install/ -DOPENSSL_ROOT_DIR=/home/${USERNAME}/temp/openssl/ && \
     cd build && \
@@ -31,7 +35,7 @@ RUN git clone https://github.com/intel/ipp-crypto.git && \
 WORKDIR /home/${USERNAME}/temp
 RUN git clone  https://github.com/intel/QAT_Engine.git qat_engine && \
     cd qat_engine && \
-    git checkout v0.6.1 && \
+    git checkout $QAT_ENGINE_TAG && \
     ./autogen.sh && \
     ./configure \
         --enable-multibuff_offload \
@@ -44,7 +48,7 @@ RUN git clone  https://github.com/intel/QAT_Engine.git qat_engine && \
 WORKDIR /home/${USERNAME}/temp
 RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
     cd nginx && \
-    git checkout v0.4.3 && \
+    git checkout $ASYNCH_NGINX_TAG && \
     ./configure --prefix=/usr/ \
         --with-http_ssl_module --add-dynamic-module=modules/nginx_qat_module \
         '--with-cc-opt=-DNGX_SECURE_MEM \
