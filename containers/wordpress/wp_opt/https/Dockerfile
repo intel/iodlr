@@ -45,7 +45,7 @@ RUN git clone  https://github.com/intel/QAT_Engine.git qat_engine && \
     make install
 
 # Build/Install AYNCH NGINX
-WORKDIR /home/${USERNAME}/temp
+WORKDIR /home/${USERNAME}/nginx_build
 RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
     cd nginx && \
     git checkout $ASYNCH_NGINX_TAG && \
@@ -58,6 +58,8 @@ RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
         -L /home/${USERNAME}/openssl_install/lib' && \
     make -j && \
     make install 
+WORKDIR /home/${USERNAME}
+RUN rm -rf ./nginx_build
 
 WORKDIR /home/${USERNAME}/oss-performance
 

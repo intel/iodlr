@@ -44,20 +44,23 @@ WORKDIR /home/${USERNAME}/certificates/ssl
 RUN openssl dhparam -out dhparam.pem 2048
 RUN chown -R ${USERNAME} /home/${USERNAME}/certificates
 
-# NGINX
-WORKDIR /home/${USERNAME}
-RUN wget http://hg.nginx.org/nginx/archive/$NGINX_ARCHIVE_NAME.tar.gz
-RUN tar zxf $NGINX_ARCHIVE_NAME.tar.gz
-WORKDIR /home/${USERNAME}/nginx-$NGINX_ARCHIVE_NAME
-RUN ./auto/configure --with-http_ssl_module \
-        '--with-cc-opt=-I /home/${USERNAME}/openssl_install/include \
+
+# Build/Install AYNCH NGINX, no QAT
+WORKDIR /home/${USERNAME}/nginx_build
+RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
+    cd nginx && \
+    git checkout $ASYNCH_NGINX_TAG && \
+    ./configure --prefix=/usr/ \
+        --with-http_ssl_module \
+        '--with-cc-opt=-DNGX_SECURE_MEM \
+        -I /home/${USERNAME}/openssl_install/include \
         -Wno-error=deprecated-declarations -Wimplicit-fallthrough=0' \
         '--with-ld-opt=-Wl,-rpath=/home/${USERNAME}/openssl_install/lib \
         -L /home/${USERNAME}/openssl_install/lib' && \
     make -j && \
-    make install 
+    make install
 WORKDIR /home/${USERNAME}
-RUN rm -rf ./$NGINX_ARCHIVE_NAME
+RUN rm -rf ./nginx_build
 
 # Rebuild siege with ssl, Uninstall Reinstall
 WORKDIR /home/${USERNAME}
