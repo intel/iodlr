@@ -1,0 +1,42 @@
+diff --git a/base/PerfTarget.php b/base/PerfTarget.php
+index 93e9b1d..7c10b00 100644
+--- a/base/PerfTarget.php
++++ b/base/PerfTarget.php
+@@ -19,9 +19,9 @@ abstract class PerfTarget {
+   }
+ 
+   final public function sanityCheck(): void {
+-    $ctx = stream_context_create(['http' => ['timeout' => 30]]);
++    $ctx = stream_context_create(['http' => ['timeout' => 30],'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+     $url =
+-      'http://'.
++      'https://'.
+       gethostname().
+       ':'.
+       PerfSettings::HttpPort().
+diff --git a/targets/wordpress/WordpressTarget.php b/targets/wordpress/WordpressTarget.php
+index d009dbd..55d013f 100644
+--- a/targets/wordpress/WordpressTarget.php
++++ b/targets/wordpress/WordpressTarget.php
+@@ -50,7 +50,7 @@ final class WordpressTarget extends PerfTarget {
+       $this->options->proxygen
+         ? PerfSettings::BackendPort()
+         : PerfSettings::HttpPort();
+-    $root = 'http://'.gethostname().':'.$visible_port;
++    $root = 'https://'.gethostname().':'.$visible_port;
+ 
+     $conn = mysqli_connect($this->options->dbHost, 'wp_bench', 'wp_bench');
+     $db_selected = mysqli_select_db($conn, 'wp_bench');
+@@ -100,9 +100,10 @@ final class WordpressTarget extends PerfTarget {
+   }
+ 
+   private function unfreezeRequest(PerfOptions $options): void {
+-    $url = 'http://'.gethostname().':'.PerfSettings::HttpPort().'/';
++    $url = 'https://'.gethostname().':'.PerfSettings::HttpPort().'/';
+     $ctx = stream_context_create(
+-      ['http' => ['timeout' => $options->maxdelayUnfreeze]]
++	    ['http' => ['timeout' => $options->maxdelayUnfreeze],
++	    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]
+     );
+     $data = file_get_contents($url, /* include path = */ false, $ctx);
+     assert(

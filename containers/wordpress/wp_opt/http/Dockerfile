@@ -56,15 +56,16 @@ RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     ninja && \
 # Optimization: Bolt php-fpm binary
     cd /home/${USERNAME}/oss-performance && \
-   ./build/bin/llvm-bolt ./php-src/sapi/fpm/php-fpm -o ./php-src/sapi/fpm/php-fpm.bolt -data=perf.fdata -reorder-blocks=cache+ -reorder-functions=hfsort+ -split-functions=3 -split-all-cold -split-eh -dyno-stats && \
+    cp ./build/bin/llvm-bolt /home/${USERNAME}/oss-performance && \
+    cp ./php-src/sapi/fpm/php-fpm /home/${USERNAME}/oss-performance && \
+    cp /home/${USERNAME}/oss-performance/php-src/modules/opcache.so /home/${USERNAME}/oss-performance && \
+    ./llvm-bolt ./php-fpm -o ./php-fpm.bolt -data=perf.fdata -reorder-blocks=cache+ -reorder-functions=hfsort+ -split-functions=3 -split-all-cold -split-eh -dyno-stats && \
     sed -i "s/\/usr\/sbin\/php-fpm7\.4/\/home\/${USERNAME}\/oss-performance\/php-fpm\.bolt/" quickrun.sh && \
     sed -i "s/zend_extension\=opcache\.so/zend_extension\=\/home\/${USERNAME}\/oss-performance\/opcache.so/" conf/php.ini && \
 # Cleanup: Remove llvm build and perf.fdata
     rm -rf /home/${USERNAME}/oss-performance/llvm && \
     rm -rf /home/${USERNAME}/oss-performance/build && \
 # Cleanup: move php binaries and remove php clone and build files
-    cp /home/${USERNAME}/oss-performance/php-src/sapi/fpm/php-fpm.bolt /home/${USERNAME}/oss-performance && \
-    cp /home/${USERNAME}/oss-performance/php-src/modules/opcache.so /home/${USERNAME}/oss-performance && \
     rm -rf /home/${USERNAME}/oss-performance/php-src && \
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
     cd /home/${USERNAME} && \
