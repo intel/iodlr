@@ -35,7 +35,7 @@ ENV USE_ZEND_ALLOC_HUGE_PAGES=${zendlp}
 
 # Build php 7.4.16 for bolting
 
-RUN if [ ${bolt} -eq 1 ] ; then \
+RUN if [ ${bolt} = "1" ] ; then \
     sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 7 && \
     cd /home/${USERNAME}/oss-performance && \
@@ -79,7 +79,7 @@ RUN if [ ${bolt} -eq 1 ] ; then \
     fi
 
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
-RUN if [ ${iodlrlp} -eq 1 ] ; then \
+RUN if [ ${iodlrlp} = "1" ] ; then \
     cd /home/${USERNAME} && \
     git clone https://github.com/intel/iodlr && \
     cd iodlr && \
@@ -93,6 +93,6 @@ RUN if [ ${iodlrlp} -eq 1 ] ; then \
 
 ARG mariadbconf=1s
 # Optimization: Query cache optimization for single socket operation (unless over-ridden)
-RUN if [ ${query} -eq 1] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
+RUN if [ ${query} = "1" ] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
 
 WORKDIR /home/${USERNAME}/oss-performance
