@@ -20,8 +20,6 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
-SHELL ["/bin/bash", "-c"] 
-
 ARG baseimage=wp_base
 ARG zendlp=1
 ARG bolt=1
@@ -29,6 +27,8 @@ ARG iodlrlp=1
 ARG query=1
 FROM $baseimage
 LABEL authors="nitin.tekchandani@intel.com,lin.a.yang@intel.com,uttam.c.pawar@intel.com"
+
+SHELL ["/bin/bash", "-c"]
 
 COPY files/perf.fdata /home/${USERNAME}/oss-performance
 
