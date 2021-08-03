@@ -20,6 +20,8 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
+SHELL ["/bin/bash", "-c"] 
+
 ARG baseimage=wp_base
 ARG zendlp=1
 ARG bolt=1
