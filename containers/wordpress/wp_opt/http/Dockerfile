@@ -21,10 +21,6 @@
 #
 # SPDX-License-Identifier: MIT
 ARG baseimage=wp_base
-ARG zendlp=1
-ARG bolt=1
-ARG iodlrlp=1
-ARG query=1
 FROM $baseimage
 LABEL authors="nitin.tekchandani@intel.com,lin.a.yang@intel.com,uttam.c.pawar@intel.com"
 
@@ -32,10 +28,10 @@ SHELL ["/bin/bash", "-c"]
 
 COPY files/perf.fdata /home/${USERNAME}/oss-performance
 
-RUN echo "$zendlp" && \
-    echo "$bolt" && \
-    echo "$iodlrlp" && \
-    echo "$query"
+ARG zendlp=1
+ARG bolt=1
+ARG iodlrlp=1
+ARG query=1
 
 # Optimization: Set environment variable to have zend use large pages
 ENV USE_ZEND_ALLOC_HUGE_PAGES="$zendlp" 
@@ -43,7 +39,6 @@ ENV USE_ZEND_ALLOC_HUGE_PAGES="$zendlp"
 # Build php 7.4.16 for bolting
 
 RUN if [[ "$bolt" == "1" ]] ; then \
-    echo "Doing bolt!!" && \
     sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 7 && \
     cd /home/${USERNAME}/oss-performance && \
@@ -88,7 +83,6 @@ RUN if [[ "$bolt" == "1" ]] ; then \
 
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
 RUN if [[ "$iodlrlp" == "1" ]] ; then \
-    echo "Doing iodlrlp!!" && \
     cd /home/${USERNAME} && \
     git clone https://github.com/intel/iodlr && \
     cd iodlr && \
@@ -102,6 +96,6 @@ RUN if [[ "$iodlrlp" == "1" ]] ; then \
 
 ARG mariadbconf=1s
 # Optimization: Query cache optimization for single socket operation (unless over-ridden)
-RUN if [[ "$query" == "1" ]] ; then echo "Doing query" && sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
+RUN if [[ "$query" == "1" ]] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
 
 WORKDIR /home/${USERNAME}/oss-performance
