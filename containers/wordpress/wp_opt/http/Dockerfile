@@ -24,13 +24,22 @@ ARG baseimage=wp_base
 FROM $baseimage
 LABEL authors="nitin.tekchandani@intel.com,lin.a.yang@intel.com,uttam.c.pawar@intel.com"
 
+SHELL ["/bin/bash", "-c"]
+
 COPY files/perf.fdata /home/${USERNAME}/oss-performance
 
+ARG zendlp=1
+ARG bolt=1
+ARG iodlrlp=1
+ARG query=1
+
 # Optimization: Set environment variable to have zend use large pages
-ENV USE_ZEND_ALLOC_HUGE_PAGES=1 
+ENV USE_ZEND_ALLOC_HUGE_PAGES="$zendlp" 
 
 # Build php 7.4.16 for bolting
-RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
+
+RUN if [[ "$bolt" == "1" ]] ; then \
+    sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 7 && \
     cd /home/${USERNAME}/oss-performance && \
     git clone https://github.com/php/php-src.git && \
@@ -69,8 +78,11 @@ RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     rm -rf /home/${USERNAME}/oss-performance/llvm && \
     rm -rf /home/${USERNAME}/oss-performance/build && \
 # Cleanup: move php binaries and remove php clone and build files
-    rm -rf /home/${USERNAME}/oss-performance/php-src && \
+    rm -rf /home/${USERNAME}/oss-performance/php-src ; \
+    fi
+
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
+RUN if [[ "$iodlrlp" == "1" ]] ; then \
     cd /home/${USERNAME} && \
     git clone https://github.com/intel/iodlr && \
     cd iodlr && \
@@ -79,10 +91,11 @@ RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 7 && \
     make -f Makefile.preload && \
     sudo cp liblppreload.so /usr/lib/ && \
     sudo sed -i 's/\/usr\/bin\/mysqld_safe/LD_PRELOAD=\/usr\/lib\/liblppreload.so \/usr\/bin\/mysqld_safe/' /etc/init.d/mysql && \
-    rm -rf /home/${USERNAME}/iodlr/ 
+    rm -rf /home/${USERNAME}/iodlr/ ; \
+    fi
 
 ARG mariadbconf=1s
 # Optimization: Query cache optimization for single socket operation (unless over-ridden)
-RUN sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf
+RUN if [[ "$query" == "1" ]] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
 
 WORKDIR /home/${USERNAME}/oss-performance
