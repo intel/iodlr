@@ -42,6 +42,7 @@ http {
     ssl_session_tickets off;
     lingering_close off;
     lingering_time 1;
+    ssl_asynch off;
 
     # https certificate lines
     ssl_certificate /home/base/certificates/server.crt;
@@ -51,11 +52,18 @@ http {
 
     ssl_session_timeout  300s;
     ssl_prefer_server_ciphers   on;
-    ssl_protocols  TLSv1.2; #or TLSv1.3;
-
-    ####### comment following line for TLSv1.3
+    
+    # The following 2 lines are for TLSv1.2 settings 
+    # To use TLSv1.3, comment these out and uncomment the next line
+    ssl_protocols TLSv1.2; 
     ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256;
+    
+    # Uncomment the line below to use TLSv1.3
+    # The SSL cipher TLS_AES_256_GCM_SHA384 is automatically selected by nginx 
+    # and cannot be specified in this config file
+    # ssl_protocols TLSv1.3; 
 
+    # secp384r1 curve applies to both TLSv1.2 and TLSv1.3
     ssl_ecdh_curve secp384r1;
 
     access_log            __NGINX_TEMP_DIR__/access.log main;
