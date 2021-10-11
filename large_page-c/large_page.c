@@ -46,6 +46,8 @@ typedef struct {
   map_status status;
 } FindParams;
 
+int iodlr_number_of_ehp_avail = 0;
+char *iodlr_use_ehp = NULL;
 #define HPS (2L * 1024 * 1024)
 
 static inline uintptr_t largepage_align_down(uintptr_t addr) {
@@ -119,8 +121,27 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
     // Once we have found the info structure for the desired linked-in object,
     // we open it on disk to find the location of its .text section. We use the
     // base address given to calculate the .text section offset in memory.
+    text_section.sh_size=0;
     find_params->status = FindTextSection(fname, &text_section);
+    // check if there are enough number of hugepages available
+    // i.e. bytes available in HP is more than total_bytes needed
+    // if not set the status = not_enough_pages, otherwise okay
     if (find_params->status == map_ok) {
+      if (iodlr_use_ehp) {
+        int pages_need = text_section.sh_size / HPS;
+        int bytes_remaining = text_section.sh_size - (pages_need * HPS);
+        if (bytes_remaining > 0) {
+          pages_need += 1;
+        }
+        if (iodlr_number_of_ehp_avail < pages_need) {
+          fprintf(stderr, "INFO: Need %d explicit pages.\n", pages_need);
+          fflush(stderr);
+          find_params->status = map_not_enough_explicit_hugepages_are_allocated;
+          return 0;
+        } else {
+          iodlr_number_of_ehp_avail -= pages_need;
+        }
+      }
       find_params->start = hdr->dlpi_addr + text_section.sh_addr;
       find_params->end = find_params->start + text_section.sh_size;
       return 1;
@@ -157,15 +178,38 @@ static map_status FindTextRegion(const char* lib_regex, mem_range* region) {
   return map_ok;
 }
 
+static map_status IsExplicitHugePagesEnabled(bool* result) {
+  *result = false;
+  FILE* ifs;
+  ifs = fopen("/proc/sys/vm/nr_hugepages", "r");
+  if (!ifs) {
+    return map_failed_to_open_thp_file;
+  }
+
+  int matched = fscanf(ifs, "%d", &iodlr_number_of_ehp_avail);
+  if (matched != 1) {
+    return map_malformed_thp_file;
+  }
+  fclose(ifs);
+  if (iodlr_number_of_ehp_avail <= 0) {
+    fprintf(stderr, "WARNING: No explicit hugepages are allocated\n");
+    fflush(stderr);
+    *result = true;
+  } else {
+    *result = true;
+  }
+  return map_ok;
+}
+
 static map_status IsTransparentHugePagesEnabled(bool* result) {
 #if defined(ENABLE_LARGE_CODE_PAGES) && ENABLE_LARGE_CODE_PAGES
+  *result = false;
   FILE* ifs;
   char always[16] = {0};
   char madvise[16] = {0};
   char never[16] = {0};
   int matched;
 
-  *result = false;
   ifs = fopen("/sys/kernel/mm/transparent_hugepage/enabled", "rt");
   if (!ifs) {
     return map_failed_to_open_thp_file;
@@ -239,9 +283,18 @@ MoveRegionToLargePages(const mem_range* r) {
     return status;                                      \
   }
 
-  tmem = mmap(start, size,
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
+  if (iodlr_use_ehp) {
+    // map to explicit hugepages
+    tmem = mmap(start, size,
+              PROT_READ | PROT_WRITE | PROT_EXEC,
+              MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED | MAP_HUGETLB,
+              -1, 0);
+  } else {
+    tmem = mmap(start, size,
+              PROT_READ | PROT_WRITE | PROT_EXEC,
+              MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1 , 0);
+  }
+
   CLEAN_EXIT_CHECK(map_see_errno_mmap_tmem);
 
 #undef CLEAN_EXIT_CHECK
@@ -262,8 +315,10 @@ MoveRegionToLargePages(const mem_range* r) {
     return status;                                      \
   }
 
-  ret = madvise(tmem, size, MADV_HUGEPAGE);
-  CLEAN_EXIT_CHECK(map_see_errno_madvise_tmem);
+  if (!iodlr_use_ehp) {
+    ret = madvise(tmem, size, MADV_HUGEPAGE);
+    CLEAN_EXIT_CHECK(map_see_errno_madvise_tmem);
+  }
 
   memcpy(start, nmem, size);
   ret = mprotect(start, size, PROT_READ | PROT_EXEC);
@@ -362,7 +417,14 @@ map_status MapStaticCodeRangeToLargePages(void* from, void* to) {
 // Return true if transparent huge pages is enabled on the system. Otherwise,
 // return false.
 map_status IsLargePagesEnabled(bool* result) {
-  return IsTransparentHugePagesEnabled(result);
+  iodlr_use_ehp = getenv("IODLR_USE_EXPLICIT_HP");
+  if (iodlr_use_ehp) {
+    fprintf(stderr, "- experimental: using explicit hugepages -  \n");
+    fflush(stderr);
+    return IsExplicitHugePagesEnabled(result);
+  } else {
+    return IsTransparentHugePagesEnabled(result);
+  }
 }
 
 const char* MapStatusStr(map_status status, bool fulltext) {
@@ -370,7 +432,7 @@ const char* MapStatusStr(map_status status, bool fulltext) {
     "map_ok",
       "ok",
     "map_failed_to_open_thp_file",
-      "failed to open thp enablement status file",
+      "failed to open hugepage enablement status file",
     "map_invalid_regex",
       "invalid regex",
     "map_invalid_region_address",
@@ -422,7 +484,9 @@ const char* MapStatusStr(map_status status, bool fulltext) {
     "map_see_errno_seek_exe_string_table_failed",
       "seeking to executable file string table failed",
     "map_read_exe_string_table_failed",
-      "reading executable file string table failed"
+      "reading executable file string table failed",
+    "map_not_enough_explicit_hugepages_are_allocated",
+      "not enough explicit hugepages are available"
   };
   return map_status_text[((int)status << 1) + (fulltext & 1)];
 }

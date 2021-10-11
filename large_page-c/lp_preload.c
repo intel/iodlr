@@ -63,7 +63,9 @@ fail:
       fprintf(stderr,
               "Mapping to large pages in not enabled on your system. "
               "Make sure /sys/kernel/mm/transparent_hugepage/enabled is set to "
-              "'madvise' or 'enabled'\n");
+              "'madvise' or 'enabled' "
+	      "Or explicit hugepages of supported size is enabled with "
+	      "+ve number in /proc/sys/vm/nr_hugepages. \n");
   } else {
     fprintf(stderr,
             "Mapping to large pages failed: %s\n",
