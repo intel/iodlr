@@ -246,8 +246,8 @@ To use explicit huge pages use environment variable as shown below,
 ```C
 $ export IODLR_USE_EXPLICIT_HP=1
 ```
-`[error/warning]`: If not enough pages are available. Please check /proc/sys/v
-m/nr_hugepages and update as needed.
+`[error/warning]`: If not enough pages are available. Please check
+/proc/sys/vm/nr_hugepages and update as needed.
 
 
 ### MapStatusStr
