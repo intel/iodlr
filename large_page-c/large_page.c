@@ -33,6 +33,10 @@
 #include <linux/limits.h>
 #include <regex.h>
 
+#ifndef MAP_HUGETLB
+#define MAP_HUGETLB 0x40000 /* arch specific */
+#endif
+
 typedef struct {
   void*     from;
   void*     to;
