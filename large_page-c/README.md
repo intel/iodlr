@@ -153,6 +153,7 @@ typedef enum {
   map_read_exe_sheaders_failed,
   map_see_errno_seek_exe_string_table_failed,
   map_read_exe_string_table_failed,
+  map_not_enough_explicit_hugepages_are_allocated
 } map_status;
 ```
 
@@ -237,7 +238,18 @@ map_status IsLargePagesEnabled(bool* result);
 - `[out] result`: Whether large pages are enabled.
 
 Performs a platform-dependent check to determine whether it is possible to map to
-large pages and stores the result of the check in `result`.
+large pages and stores the result of the check in `result.
+It supports both transparent and explicit hugepages. By default it will
+use transparent hugepages.
+To use explicit huge pages use an environment variable as shown below,
+`
+```C
+$ export IODLR_USE_EXPLICIT_HP=1
+```
+`[error/warning/info]`: If not enough pages are available. User will also be
+informed about how many pages a program would need (code section only). Please 
+check and update /proc/sys/vm/nr_hugepages as required.
+
 
 ### MapStatusStr
 
