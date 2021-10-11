@@ -38,10 +38,9 @@ RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/op
 RUN mkdir -p /home/${USERNAME}/certificates/ssl
 WORKDIR /home/${USERNAME}/certificates
 RUN openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)"
-RUN openssl ecparam -genkey -out key.pem -name prime256v1
+RUN openssl ecparam -genkey -out key.pem -name secp384r1
 RUN openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)"
 WORKDIR /home/${USERNAME}/certificates/ssl
-RUN openssl dhparam -out dhparam.pem 2048
 RUN chown -R ${USERNAME} /home/${USERNAME}/certificates
 
 
