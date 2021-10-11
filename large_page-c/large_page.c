@@ -415,6 +415,8 @@ const char* MapStatusStr(map_status status, bool fulltext) {
       "closing executable file failed",
     "map_see_errno_seek_exe_sheaders_failed",
       "seeking to executable file section headers failed",
+    "map_read_exe_header_failed",
+      "reading executable file header failed",
     "map_read_exe_sheaders_failed",
       "reading executable file section headers failed",
     "map_see_errno_seek_exe_string_table_failed",
