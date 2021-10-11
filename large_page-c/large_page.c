@@ -129,7 +129,7 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
     if (find_params->status == map_ok) {
       if (iodlr_use_ehp) {
         int pages_need = text_section.sh_size / HPS;
-        int bytes_remaining = text_section.sh_size - (pages_need * HPS);
+        int bytes_remaining = text_section.sh_size % HPS;
         if (bytes_remaining > 0) {
           pages_need += 1;
         }
