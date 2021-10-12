@@ -54,6 +54,7 @@ typedef enum {
   map_read_exe_sheaders_failed,
   map_see_errno_seek_exe_string_table_failed,
   map_read_exe_string_table_failed,
+  map_failed_to_open_ehp_file,
   map_not_enough_explicit_hugepages_are_allocated
 } map_status;
 

@@ -187,7 +187,7 @@ static map_status IsExplicitHugePagesEnabled(bool* result) {
   FILE* ifs;
   ifs = fopen("/proc/sys/vm/nr_hugepages", "r");
   if (!ifs) {
-    return map_failed_to_open_thp_file;
+    return map_failed_to_open_ehp_file;
   }
 
   int matched = fscanf(ifs, "%d", &iodlr_number_of_ehp_avail);
@@ -489,6 +489,8 @@ const char* MapStatusStr(map_status status, bool fulltext) {
       "seeking to executable file string table failed",
     "map_read_exe_string_table_failed",
       "reading executable file string table failed",
+    "map_failed_to_open_ehp_file",
+      "failed to open nr_hugepages file",
     "map_not_enough_explicit_hugepages_are_allocated",
       "not enough explicit hugepages are available"
   };
