@@ -239,11 +239,11 @@ map_status IsLargePagesEnabled(bool* result);
 - `[out] result`: Whether large pages are enabled.
 
 Performs a platform-dependent check to determine whether it is possible to map to
-large pages and stores the result of the check in `result.
+large pages and stores the result of the check in result.
 It supports both transparent and explicit hugepages. By default it will
 use transparent hugepages.
 To use explicit huge pages use an environment variable as shown below,
-`
+
 ```C
 $ export IODLR_USE_EXPLICIT_HP=1
 ```
