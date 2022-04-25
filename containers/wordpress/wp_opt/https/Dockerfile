@@ -64,4 +64,7 @@ RUN rm -rf ./nginx_build
 WORKDIR /home/${USERNAME}/oss-performance
 
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
+
+RUN ln -s /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/build/bin/libcrypto_mb.so.11.1 /usr/lib/libcrypto_mb.so.11
+
 USER ${USERNAME}
