@@ -1,6 +1,6 @@
 worker_processes  96; # Depends on #vcpus
 
-load_module /home/base/nginx_install/modules/ngx_ssl_engine_qat_module.so;
+load_module /usr/modules/ngx_ssl_engine_qat_module.so;
 
 error_log __NGINX_TEMP_DIR__/nginx-error.log;
 pid __NGINX_PID_FILE__;
