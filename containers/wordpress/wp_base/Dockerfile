@@ -21,6 +21,7 @@
 #
 # SPDX-License-Identifier: MIT
 ARG PHP_VER=7.4
+ARG wordpressversion
 
 
 # ----- php container -----
@@ -159,7 +160,19 @@ WORKDIR /home/${USERNAME}
 # Clone and install oss-performance (commit_id: 138c015)
 RUN git clone https://github.com/intel/Updates-for-OSS-Performance oss-performance && \
     cd oss-performance && \
-    git checkout 138c015
+    git checkout 0026641
+
+# update wordpress version
+ARG wordpressversion
+WORKDIR /home/${USERNAME}/oss-performance/targets/wordpress
+RUN if [ $wordpressversion != 4.2 ] ; then \
+        wget https://wordpress.org/wordpress-${wordpressversion}.tar.gz && \
+        sed -i "s/4.2.0/${wordpressversion}/g" WordpressTarget.php && \
+        mv WordpressTarget_v5.urls WordpressTarget.urls && \
+        mv dbdump_v5.sql.gz dbdump.sql.gz && \
+        rm wordpress-4.2.0.tar.gz; \
+    fi
+
 WORKDIR /home/${USERNAME}/oss-performance
 RUN wget https://getcomposer.org/installer -O composer-setup.php && \
     php composer-setup.php && \
