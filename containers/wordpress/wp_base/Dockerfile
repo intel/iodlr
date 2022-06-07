@@ -20,16 +20,14 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
-ARG PHP_VER=7.4
-ARG wordpressversion
 
 
 # ----- php container -----
 # used for copying built php-fpm and opcache.so
 # 
 # ----- php-fpm build container -----
+ARG PHP_VER
 FROM php:${PHP_VER}-fpm AS php-fpm
-
 ENV TZ=America/Los_Angeles
 ENV DEBIAN_FRONTEND noninteractive
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime ;\
@@ -58,30 +56,6 @@ RUN docker-php-source extract; \
  docker-php-source delete;
 
 
-# ----- siege container -----
-# 
-# build siege
-FROM ubuntu:20.04
-LABEL authors="ping.zhao@intel.com"
-ARG DEBIAN_FRONTEND="noninteractive"
-ARG TZ="America/Los_Angeles"
-ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
-ENV USERNAME="base"
-
-# Build and install siege 2.78
-RUN wget http://download.joedog.org/siege/siege-2.78.tar.gz && \
-    tar zxf siege-2.78.tar.gz
-WORKDIR /home/${USERNAME}/siege-2.78
-RUN ./utils/bootstrap && \
-    automake --add-missing && \
-    ./configure && \
-    make -j8 && \
-    sudo make uninstall && \
-    sudo make install
-WORKDIR /home/${USERNAME}
-RUN rm -rf /home/${USERNAME}/siege-2.78
-
-
 # ----- https base container -----
 #
 # base container for a;
@@ -89,13 +63,14 @@ RUN rm -rf /home/${USERNAME}/siege-2.78
 #   PHP 7.4/8.0
 # --------------------------------
 FROM ubuntu:20.04
+LABEL authors="ping.zhao@intel.com, yuhan.yang@intel.com"
 ENV USERNAME="base"
 
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG TZ="America/Los_Angeles"
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 
-# Install required packages that are not included in ubuntu core image
+# Install required packages that are not included in ubuntu core image and mariadb
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     apt-transport-https \
@@ -127,26 +102,13 @@ RUN apt-get update && apt-get install -y \
     bison \ 
     re2c \
     libxml2-dev \
-    libsqlite3-dev; \
+    libsqlite3-dev \
+    php-mysql \
+    php \
+    mariadb-server && \
     rm -rf /var/lib/apt/lists/*
 
-# Instal PHP
-RUN add-apt-repository -y ppa:ondrej/php && \
-    apt-get update && \
-    apt-get install -y \
-    php7.4 php7.4-fpm php7.4-mysql \
-    php7.4-gd php7.4-mbstring php7.4-xml
-# update php-fpm
-COPY --from=php-fpm /php-fpm /opt/pkb/git/hhvm-perf/php-fpm
-COPY --from=php-fpm /opcache.so /opt/pkb/git/hhvm-perf/opcache.so
-
-
-# Install mariadb
-RUN apt-get install -y \
-    mariadb-server \
- && rm -rf /var/lib/apt/lists/*
-
-# Create new Linux account
+# Create a new Linux account
 RUN useradd -rm -d /home/${USERNAME} -s /bin/bash -g root -G sudo -u 1001 ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
 
@@ -154,18 +116,14 @@ RUN useradd -rm -d /home/${USERNAME} -s /bin/bash -g root -G sudo -u 1001 ${USER
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
-# Build and install siege 2.78
-# intall later
-
-# Clone and install oss-performance (commit_id: 138c015)
+# Clone and install oss-performance
+# If WP not 4.2, download WP5.2, change the WP target from 4.2 to 5.2, replace WP4.2 database dump with WP5.2, and change URLs list, remove WP4.2
+ARG wordpressversion
 RUN git clone https://github.com/intel/Updates-for-OSS-Performance oss-performance && \
     cd oss-performance && \
-    git checkout 0026641
-
-# update wordpress version
-ARG wordpressversion
-WORKDIR /home/${USERNAME}/oss-performance/targets/wordpress
-RUN if [ $wordpressversion != 4.2 ] ; then \
+    git checkout 0026641 && \
+    cd /home/${USERNAME}/oss-performance/targets/wordpress && \
+    if [ $wordpressversion != 4.2 ] ; then \
         wget https://wordpress.org/wordpress-${wordpressversion}.tar.gz && \
         sed -i "s/4.2.0/${wordpressversion}/g" WordpressTarget.php && \
         mv WordpressTarget_v5.urls WordpressTarget.urls && \
@@ -186,7 +144,6 @@ COPY files/1s-bkm.j2 /home/${USERNAME}
 COPY files/2s-bkm.j2 /home/${USERNAME}
 RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf
 
-
 # Create new MariaDB account "wp_bench" and database "wp_bench"
 RUN sudo service mysql start && \
     sleep 1 && \
@@ -197,15 +154,7 @@ RUN sudo service mysql start && \
     sudo mysql -u root -e "FLUSH PRIVILEGES" && \
     sudo service mysql stop
 
-WORKDIR /home/${USERNAME}/oss-performance
-COPY --chown=${USERNAME}:root files/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --chown=${USERNAME}:root files/quickrun.sh /home/${USERNAME}/oss-performance
-RUN chmod +x /home/${USERNAME}/oss-performance/quickrun.sh
-
-
 # install https modules
-#
-
 ENV OPENSSL_TAG=OpenSSL_1_1_1f
 ENV NGINX_ARCHIVE_NAME=release-1.18.0
 ENV SIEGE_ARCHIVE_NAME='siege-4.0.9'
@@ -216,7 +165,8 @@ RUN apt-get update -y && \
     apt-get remove nginx -y && \
     apt-get install -y \
     libpcre3 \
-    libpcre3-dev
+    libpcre3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Build/Install openssl
 RUN mkdir /home/${USERNAME}/openssl_build
@@ -227,22 +177,19 @@ RUN git clone https://github.com/openssl/openssl.git && \
     mkdir -p /home/${USERNAME}/openssl_install/lib/engines-1.1 && \
     ./config --prefix=/home/${USERNAME}/openssl_install \
              -Wl,-rpath=/home/${USERNAME}/openssl && \
-     make update && \
-     make -j 10 &&  \
-     make install
-WORKDIR /home/${USERNAME}
-RUN rm -rf /home/${USERNAME}/openssl_build
-
+    make update && \
+    make -j &&  \
+    make install && \
+    rm -rf /home/${USERNAME}/openssl_build
 
 # Comment out RANDFILE entry in /etc/ssl/openssl.cnf
-RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/openssl.cnf
-
 # Create required certificates for https
-RUN mkdir -p /home/${USERNAME}/certificates/ssl
 WORKDIR /home/${USERNAME}/certificates
-RUN openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)"
-RUN openssl ecparam -genkey -out key.pem -name secp384r1
-RUN openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)"
+RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/openssl.cnf && \
+    mkdir -p /home/${USERNAME}/certificates/ssl && \
+    openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \
+    openssl ecparam -genkey -out key.pem -name secp384r1 && \
+    openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" 
 WORKDIR /home/${USERNAME}/certificates/ssl
 RUN chown -R ${USERNAME} /home/${USERNAME}/certificates
 
@@ -260,41 +207,44 @@ RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
         '--with-ld-opt=-Wl,-rpath=/home/${USERNAME}/openssl_install/lib \
         -L /home/${USERNAME}/openssl_install/lib' && \
     make -j && \
-    make install
-WORKDIR /home/${USERNAME}
-RUN rm -rf ./nginx_build
+    make install && \
+    rm -rf /home/${USERNAME}/nginx_build
 
 # Rebuild siege with ssl, Uninstall Reinstall
+# Build and install siege 2.78
 WORKDIR /home/${USERNAME}
-RUN wget http://download.joedog.org/siege/$SIEGE_ARCHIVE_NAME.tar.gz
-RUN tar zxf $SIEGE_ARCHIVE_NAME.tar.gz
-WORKDIR /home/${USERNAME}/$SIEGE_ARCHIVE_NAME
-RUN ./configure --with-ssl=/usr/bin/openssl && \
-    make -j8 && \
+RUN wget http://download.joedog.org/siege/siege-2.78.tar.gz && \
+    tar zxf siege-2.78.tar.gz
+WORKDIR /home/${USERNAME}/siege-2.78
+RUN ./utils/bootstrap && \
+    automake --add-missing && \
+    ./configure --with-ssl=/usr/bin/openssl  && \
+    make -j && \
     sudo make uninstall && \
-    sudo make install
-WORKDIR /home/${USERNAME}
-RUN rm -rf ./$SIEGE_ARCHIVE_NAME
+    sudo make install && \
+    rm -r /home/${USERNAME}/siege-2.78
 
 WORKDIR /home/${USERNAME}/oss-performance
-
-# Modify WordPressTarget urls for https
-RUN sed -i 's/http/https/' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.urls
-
-# Temporary fix
-RUN sed -i ':currentline;N;$!bcurrentline;s/invariant.*);//g' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.php
+# Modify WordPressTarget urls for https and temporary fix
+RUN sed -i 's/http/https/' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.urls && \
+    sed -i ':currentline;N;$!bcurrentline;s/invariant.*);//g' /home/${USERNAME}/oss-performance/targets/wordpress/WordpressTarget.php
 
 # Patch https into oss-performance
 COPY --chown=${USERNAME}:root files/https_oss_performance.patch /home/${USERNAME}/oss-performance
 COPY --chown=${USERNAME}:root files/update_nginx_workers.sh /usr/local/bin/update_nginx_workers.sh
 RUN git apply https_oss_performance.patch
 
-RUN sed -r --expression='s/(exec "\$\@")/\/usr\/local\/bin\/update_nginx_workers\.sh\n\1/g' -i /usr/local/bin/entrypoint.sh
-
 COPY --chown=${USERNAME}:root files/ssl-params.conf /home/${USERNAME}/certificates/ssl
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
+COPY --chown=${USERNAME}:root files/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -r --expression='s/(exec "\$\@")/\/usr\/local\/bin\/update_nginx_workers\.sh\n\1/g' -i /usr/local/bin/entrypoint.sh
 
 USER ${USERNAME}
+COPY --from=php-fpm --chown=${USERNAME}:root /php-fpm /home/${USERNAME}/oss-performance
+COPY --from=php-fpm --chown=${USERNAME}:root /opcache.so /home/${USERNAME}/oss-performance
+COPY --chown=${USERNAME}:root files/quickrun.sh /home/${USERNAME}/oss-performance
+COPY --chown=${USERNAME}:root files/php-base.ini /home/${USERNAME}/oss-performance/conf/php.ini
+RUN chmod +x /home/${USERNAME}/oss-performance/quickrun.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD [ "bash" ]

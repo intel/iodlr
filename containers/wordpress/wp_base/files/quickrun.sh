@@ -21,4 +21,4 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
-php perf.php --php=/usr/sbin/php-fpm7.4 --wordpress --i-am-not-benchmarking --siege=/usr/local/bin/siege $@
+php perf.php --php=/home/base/oss-performance/php-fpm --wordpress --i-am-not-benchmarking --siege=/usr/local/bin/siege $@
