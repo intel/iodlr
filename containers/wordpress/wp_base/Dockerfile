@@ -134,18 +134,16 @@ RUN git clone https://github.com/intel/Updates-for-OSS-Performance oss-performan
 WORKDIR /home/${USERNAME}/oss-performance
 RUN wget https://getcomposer.org/installer -O composer-setup.php && \
     php composer-setup.php && \
-    php composer.phar install
-
-# Basic environment tuning
-RUN echo "soft nofile 1000000\nhard nofile 1000000" | sudo tee -a /etc/security/limits.conf
+    php composer.phar install && \
+    # Basic environment tuning
+    echo "soft nofile 1000000\nhard nofile 1000000" | sudo tee -a /etc/security/limits.conf
 
 # MariaDB Tuning to disable query cache
 COPY files/1s-bkm.j2 /home/${USERNAME}
 COPY files/2s-bkm.j2 /home/${USERNAME}
-RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf
-
-# Create new MariaDB account "wp_bench" and database "wp_bench"
-RUN sudo service mysql start && \
+RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf && \
+    # Create new MariaDB account "wp_bench" and database "wp_bench"
+    sudo service mysql start && \
     sleep 1 && \
     sudo mysqladmin -u root password "" && \
     sudo mysql -u root -e "CREATE USER 'wp_bench'@'localhost' IDENTIFIED BY 'wp_bench'" && \
@@ -156,8 +154,9 @@ RUN sudo service mysql start && \
 
 # install https modules
 ENV OPENSSL_TAG=OpenSSL_1_1_1f
-ENV NGINX_ARCHIVE_NAME=release-1.18.0
-ENV SIEGE_ARCHIVE_NAME='siege-4.0.9'
+# TODO
+# ENV ASYNCH_NGINX_TAG=
+ENV SIEGE_VERSION='siege-2.78'
 
 USER root
 
@@ -189,9 +188,8 @@ RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/op
     mkdir -p /home/${USERNAME}/certificates/ssl && \
     openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \
     openssl ecparam -genkey -out key.pem -name secp384r1 && \
-    openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" 
-WORKDIR /home/${USERNAME}/certificates/ssl
-RUN chown -R ${USERNAME} /home/${USERNAME}/certificates
+    openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \ 
+    chown -R ${USERNAME} /home/${USERNAME}/certificates
 
 
 # Build/Install AYNCH NGINX, no QAT
@@ -213,16 +211,16 @@ RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
 # Rebuild siege with ssl, Uninstall Reinstall
 # Build and install siege 2.78
 WORKDIR /home/${USERNAME}
-RUN wget http://download.joedog.org/siege/siege-2.78.tar.gz && \
-    tar zxf siege-2.78.tar.gz
-WORKDIR /home/${USERNAME}/siege-2.78
+RUN wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
+    tar zxf ${SIEGE_VERSION}.tar.gz
+WORKDIR /home/${USERNAME}/${SIEGE_VERSION}
 RUN ./utils/bootstrap && \
     automake --add-missing && \
     ./configure --with-ssl=/usr/bin/openssl  && \
     make -j && \
     sudo make uninstall && \
     sudo make install && \
-    rm -r /home/${USERNAME}/siege-2.78
+    rm -r /home/${USERNAME}/${SIEGE_VERSION}
 
 WORKDIR /home/${USERNAME}/oss-performance
 # Modify WordPressTarget urls for https and temporary fix
