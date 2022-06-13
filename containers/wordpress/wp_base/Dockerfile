@@ -155,7 +155,7 @@ RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf && \
 # install https modules
 ENV OPENSSL_TAG=OpenSSL_1_1_1f
 # TODO
-# ENV ASYNCH_NGINX_TAG=
+ENV ASYNCH_NGINX_TAG='v0.4.7'
 ENV SIEGE_VERSION='siege-2.78'
 
 USER root
