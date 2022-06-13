@@ -52,6 +52,7 @@ RUN if [ "$bolt" = "1" ] ; then \
     ninja && \
 # Optimization: Bolt php-fpm binary
     cd /home/${USERNAME}/oss-performance && \
+    rm /home/${USERNAME}/oss-performance/pdo_mysql.so /home/${USERNAME}/oss-performance/mysqli.so 2> /dev/null; \
     cp ./build/bin/llvm-bolt /home/${USERNAME}/oss-performance && \
     cp ./php-src/sapi/fpm/php-fpm /home/${USERNAME}/oss-performance && \
     cp /home/${USERNAME}/oss-performance/php-src/modules/opcache.so /home/${USERNAME}/oss-performance && \

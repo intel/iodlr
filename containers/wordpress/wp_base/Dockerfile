@@ -20,40 +20,23 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
-
+ARG PHP_VER
 
 # ----- php container -----
 # used for copying built php-fpm and opcache.so
 # 
 # ----- php-fpm build container -----
-ARG PHP_VER
 FROM php:${PHP_VER}-fpm AS php-fpm
+
 ENV TZ=America/Los_Angeles
 ENV DEBIAN_FRONTEND noninteractive
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime ;\
  echo $TZ > /etc/timezone
-RUN apt-get update; \
- apt-get install -y \
- libonig-dev \
- libsqlite3-dev \
- zlib1g-dev \
- libpng-dev \
- libssl-dev \
- libxml2-dev;
-
-WORKDIR /usr/src/php
-RUN docker-php-source extract; \
-  ./configure \
-  --enable-fpm \
-  --with-mysqli \
-  --with-pdo-mysql \
-  --enable-pcntl; \
- EXTRA_CFLAGS="-g -fno-reorder-blocks-and-partition" \
- LDFLAGS="-Wl,--emit-relocs,-znow" \
- make -j; \
- cp /usr/src/php/sapi/fpm/php-fpm /php-fpm;\
- cp /usr/src/php/modules/opcache.so /opcache.so;\
- docker-php-source delete;
+RUN docker-php-ext-configure pdo_mysql && \
+    docker-php-ext-configure mysqli && \
+    docker-php-ext-install -j$(nproc)  mysqli pdo_mysql; \
+    cp /usr/local/sbin/php-fpm /php-fpm; \
+    cp /usr/local/lib/php/extensions/*/*.so /;
 
 
 # ----- https base container -----
@@ -105,6 +88,7 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     php-mysql \
     php \
+    libonig5 \
     mariadb-server && \
     rm -rf /var/lib/apt/lists/*
 
@@ -240,6 +224,8 @@ RUN sed -r --expression='s/(exec "\$\@")/\/usr\/local\/bin\/update_nginx_workers
 USER ${USERNAME}
 COPY --from=php-fpm --chown=${USERNAME}:root /php-fpm /home/${USERNAME}/oss-performance
 COPY --from=php-fpm --chown=${USERNAME}:root /opcache.so /home/${USERNAME}/oss-performance
+COPY --from=php-fpm --chown=${USERNAME}:root /pdo_mysql.so /home/${USERNAME}/oss-performance
+COPY --from=php-fpm --chown=${USERNAME}:root /mysqli.so /home/${USERNAME}/oss-performance
 COPY --chown=${USERNAME}:root files/quickrun.sh /home/${USERNAME}/oss-performance
 COPY --chown=${USERNAME}:root files/php-base.ini /home/${USERNAME}/oss-performance/conf/php.ini
 RUN chmod +x /home/${USERNAME}/oss-performance/quickrun.sh
