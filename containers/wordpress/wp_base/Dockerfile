@@ -38,6 +38,19 @@ RUN docker-php-ext-configure pdo_mysql && \
     cp /usr/local/sbin/php-fpm /php-fpm; \
     cp /usr/local/lib/php/extensions/*/*.so /;
 
+# ----- The container for building the components-----
+FROM ubuntu:20.04 AS dep-components
+ARG DEBIAN_FRONTEND="noninteractive"
+ARG TZ="America/Los_Angeles"
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    gcc-10 \
+    g++-10 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 10 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 10
 
 # ----- https base container -----
 #
@@ -139,7 +152,7 @@ RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf && \
 # install https modules
 ENV OPENSSL_TAG=OpenSSL_1_1_1f
 # TODO
-# ENV ASYNCH_NGINX_TAG=
+ENV ASYNCH_NGINX_TAG='v0.4.7'
 ENV SIEGE_VERSION='siege-2.78'
 
 USER root
