@@ -55,6 +55,19 @@ RUN docker-php-source extract; \
  cp /usr/src/php/modules/opcache.so /opcache.so;\
  docker-php-source delete;
 
+# ----- The container for building the components-----
+FROM ubuntu:20.04 AS dep-components
+ARG DEBIAN_FRONTEND="noninteractive"
+ARG TZ="America/Los_Angeles"
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    gcc-10 \
+    g++-10 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 10 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 10
 
 # ----- https base container -----
 #
