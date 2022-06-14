@@ -114,11 +114,10 @@ USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # Clone and install oss-performance
-# If WP not 4.2, download WP5.2, change the WP target from 4.2 to 5.2, replace WP4.2 database dump with WP5.2, and change URLs list, remove WP4.2
+# If WP not 4.2, download and update with wordpressversion, replace WP4.2 database dump with WP5.2, and change URLs list, remove WP4.2
 ARG wordpressversion
-RUN git clone https://github.com/intel/Updates-for-OSS-Performance oss-performance && \
+RUN git clone --depth 1 -b v1.3 https://github.com/intel/Updates-for-OSS-Performance oss-performance && \
     cd oss-performance && \
-    git checkout 0026641 && \
     cd /home/${USERNAME}/oss-performance/targets/wordpress && \
     if [ $wordpressversion != 4.2 ] ; then \
         wget https://wordpress.org/wordpress-${wordpressversion}.tar.gz && \
