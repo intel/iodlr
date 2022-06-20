@@ -21,6 +21,11 @@
 #
 # SPDX-License-Identifier: MIT
 ARG PHP_VER
+ARG INSTALL_DIR="/pkg_install"
+ARG OPENSSL_TAG=OpenSSL_1_1_1f
+ARG SIEGE_VERSION='siege-2.78'
+ARG ASYNCH_NGINX_TAG='v0.4.7'
+
 
 # ----- php container -----
 # used for copying built php-fpm and opcache.so
@@ -39,35 +44,21 @@ RUN docker-php-ext-configure pdo_mysql && \
     cp /usr/local/lib/php/extensions/*/*.so /;
 
 # ----- The container for building the components-----
+# build siege, openssl, async Nginx ...
+# to copy the binary to worker container
+# ----------------------------------------------------
 FROM ubuntu:20.04 AS dep-components
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG TZ="America/Los_Angeles"
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+
+ENV USERNAME="base"
+ARG INSTALL_DIR
+
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     gcc-10 \
-    g++-10 && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 10 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 10
-
-# ----- https base container -----
-#
-# base container for a;
-#   WP 4.2/5.6
-#   PHP 7.4/8.0
-# --------------------------------
-FROM ubuntu:20.04
-LABEL authors="ping.zhao@intel.com, yuhan.yang@intel.com"
-ENV USERNAME="base"
-
-ARG DEBIAN_FRONTEND="noninteractive"
-ARG TZ="America/Los_Angeles"
-ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
-
-# Install required packages that are not included in ubuntu core image and mariadb
-RUN apt-get update && apt-get install -y \
+    g++-10 \
     software-properties-common \
     apt-transport-https \
     git \
@@ -101,7 +92,92 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     php-mysql \
     php \
+    libpcre3 \
+    libpcre3-dev \
+    libonig5
+
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 10 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 10
+
+ARG OPENSSL_TAG
+ARG SIEGE_VERSION
+
+# Build/Install openssl
+RUN mkdir -p /home/${USERNAME}/openssl_build
+WORKDIR /home/${USERNAME}/openssl_build
+RUN git clone --depth 1 -b $OPENSSL_TAG https://github.com/openssl/openssl.git && \
+    cd openssl && \
+    mkdir -p /home/${USERNAME}/openssl_install/lib/engines-1.1 && \
+    ./config --prefix=/home/${USERNAME}/openssl_install \
+             -Wl,-rpath=/home/${USERNAME}/openssl && \
+    make update && \
+    make -j &&  \
+    mkdir -p $INSTALL_DIR ; \
+    make install DESTDIR=$INSTALL_DIR && \
+    rm -rf /home/${USERNAME}/openssl_build
+
+
+# build siege with ssl, Uninstall & Reinstall
+# Build and install siege 2.78
+RUN cd /home/${USERNAME}; \
+    wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
+    tar zxf ${SIEGE_VERSION}.tar.gz
+WORKDIR /home/${USERNAME}/${SIEGE_VERSION}
+RUN ./utils/bootstrap && \
+    automake --add-missing && \
+    ./configure --with-ssl=/usr/bin/openssl  && \
+    make -j && \
+    sudo make uninstall && \
+    mkdir -p $INSTALL_DIR/usr/local/etc && \
+    sudo make install DESTDIR=$INSTALL_DIR ;
+
+ARG ASYNCH_NGINX_TAG
+# Build/Install AYNCH NGINX, no QAT
+WORKDIR /home/${USERNAME}/nginx_build
+RUN git clone --depth 1 -b $ASYNCH_NGINX_TAG https://github.com/intel/asynch_mode_nginx.git nginx && \
+    cd nginx && \
+    ./configure --prefix=/usr/ \
+        --with-http_ssl_module \
+        '--with-cc-opt=-DNGX_SECURE_MEM \
+        -I /home/${USERNAME}/openssl_install/include \
+        -Wno-error=deprecated-declarations -Wimplicit-fallthrough=0' \
+        '--with-ld-opt=-Wl,-rpath=/home/${USERNAME}/openssl_install/lib \
+        -L /home/${USERNAME}/openssl_install/lib' && \
+    make -j && \
+    make install DESTDIR=$INSTALL_DIR && \
+    rm -rf /home/${USERNAME}/nginx_build
+
+# ----- https base container -----
+#
+# base container for a;
+#   WP 4.2/5.6
+#   PHP 7.4/8.0
+# --------------------------------
+FROM ubuntu:20.04
+LABEL authors="ping.zhao@intel.com, yuhan.yang@intel.com"
+ENV USERNAME="base"
+
+ARG INSTALL_DIR
+ARG DEBIAN_FRONTEND="noninteractive"
+ARG TZ="America/Los_Angeles"
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+
+# Install required packages that are not included in ubuntu core image and mariadb
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    apt-transport-https \
+    vim \
+    git \
+    wget \
+    python3-pip \
+    sudo \
+    linux-tools-common \
+    libssl-dev \
+    php-mysql \
+    php \
     libonig5 \
+    libpcre3 \
+    libpcre3-dev \    
     mariadb-server && \
     rm -rf /var/lib/apt/lists/*
 
@@ -148,34 +224,11 @@ RUN sudo cp /home/${USERNAME}/2s-bkm.j2 /etc/mysql/my.cnf && \
     sudo mysql -u root -e "FLUSH PRIVILEGES" && \
     sudo service mysql stop
 
-# install https modules
-ENV OPENSSL_TAG=OpenSSL_1_1_1f
-# TODO
-ENV ASYNCH_NGINX_TAG='v0.4.7'
-ENV SIEGE_VERSION='siege-2.78'
-
+# https modules
 USER root
 
-RUN apt-get update -y && \
-    apt-get remove nginx -y && \
-    apt-get install -y \
-    libpcre3 \
-    libpcre3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build/Install openssl
-RUN mkdir /home/${USERNAME}/openssl_build
-WORKDIR /home/${USERNAME}/openssl_build
-RUN git clone https://github.com/openssl/openssl.git && \
-    cd openssl && \
-    git checkout $OPENSSL_TAG && \
-    mkdir -p /home/${USERNAME}/openssl_install/lib/engines-1.1 && \
-    ./config --prefix=/home/${USERNAME}/openssl_install \
-             -Wl,-rpath=/home/${USERNAME}/openssl && \
-    make update && \
-    make -j &&  \
-    make install && \
-    rm -rf /home/${USERNAME}/openssl_build
+# Binary copy openssl, siege, AYNCH NGINX no QAT, 
+COPY  --from=dep-components --chown=${USERNAME}:root $INSTALL_DIR /
 
 # Comment out RANDFILE entry in /etc/ssl/openssl.cnf
 # Create required certificates for https
@@ -187,36 +240,6 @@ RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/op
     openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \ 
     chown -R ${USERNAME} /home/${USERNAME}/certificates
 
-
-# Build/Install AYNCH NGINX, no QAT
-WORKDIR /home/${USERNAME}/nginx_build
-RUN git clone https://github.com/intel/asynch_mode_nginx.git nginx && \
-    cd nginx && \
-    git checkout $ASYNCH_NGINX_TAG && \
-    ./configure --prefix=/usr/ \
-        --with-http_ssl_module \
-        '--with-cc-opt=-DNGX_SECURE_MEM \
-        -I /home/${USERNAME}/openssl_install/include \
-        -Wno-error=deprecated-declarations -Wimplicit-fallthrough=0' \
-        '--with-ld-opt=-Wl,-rpath=/home/${USERNAME}/openssl_install/lib \
-        -L /home/${USERNAME}/openssl_install/lib' && \
-    make -j && \
-    make install && \
-    rm -rf /home/${USERNAME}/nginx_build
-
-# Rebuild siege with ssl, Uninstall Reinstall
-# Build and install siege 2.78
-WORKDIR /home/${USERNAME}
-RUN wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
-    tar zxf ${SIEGE_VERSION}.tar.gz
-WORKDIR /home/${USERNAME}/${SIEGE_VERSION}
-RUN ./utils/bootstrap && \
-    automake --add-missing && \
-    ./configure --with-ssl=/usr/bin/openssl  && \
-    make -j && \
-    sudo make uninstall && \
-    sudo make install && \
-    rm -r /home/${USERNAME}/${SIEGE_VERSION}
 
 WORKDIR /home/${USERNAME}/oss-performance
 # Modify WordPressTarget urls for https and temporary fix
