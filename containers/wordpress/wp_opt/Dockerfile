@@ -91,7 +91,7 @@ RUN ./llvm-bolt ./php-fpm -o ./php-fpm.bolt -data=perf.fdata -reorder-blocks=cac
 USER root
 
 RUN apt-get update && \
-    apt-get install -y libtool
+    apt-get install -y libtool nasm
 
 # Build/Install IPP cyrypto library for the multi-buffer support
 WORKDIR /home/${USERNAME}/temp
@@ -106,6 +106,16 @@ RUN git clone https://github.com/intel/ipp-crypto.git && \
     ln -s /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/build/bin/libcrypto_mb.so /home/${USERNAME}/crypto_mb/lib/ && \
     ln -s /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/include /home/${USERNAME}/crypto_mb/include
 
+# Build/install IPSec_MB library
+ARG IPSEC_MB_TAG=v0.55
+WORKDIR /home/${USERNAME}/temp
+RUN mkdir ipsec && \
+    git clone https://github.com/intel/intel-ipsec-mb.git && \
+    cd intel-ipsec-mb/ && \
+    git checkout $IPSEC_MB_TAG && \
+    make -j && \
+    make install PREFIX=/home/${USERNAME}/temp/ipsec
+
 # Build/Install QAT engine 
 WORKDIR /home/${USERNAME}/temp
 RUN git clone  https://github.com/intel/QAT_Engine.git qat_engine && \
@@ -114,9 +124,11 @@ RUN git clone  https://github.com/intel/QAT_Engine.git qat_engine && \
     ./autogen.sh && \
     ./configure \
         --enable-multibuff_offload \
+        --enable-ipsec_offload \
+        --with-ipsec_install_dir=/home/${USERNAME}/temp/ipsec \
         --with-multibuff_install_dir=/home/${USERNAME}/crypto_mb \
         --with-openssl_install_dir=/home/${USERNAME}/openssl_install && \
-    make && \
+    make -j && \
     make install
 
 # Build/Install AYNCH NGINX
