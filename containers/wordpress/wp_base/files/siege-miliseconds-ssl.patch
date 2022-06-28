@@ -1,0 +1,657 @@
+diff -Naur siege-2.78/doc/siegerc.in siege-2.78-modif/doc/siegerc.in
+--- siege-2.78/doc/siegerc.in	2013-02-07 05:01:58.000000000 -0800
++++ siege-2.78-modif/doc/siegerc.in	2020-04-29 17:39:49.192809819 -0700
+@@ -361,6 +361,13 @@
+ # ssl-ciphers = 
+ 
+ #
++# cipher-interval
++# When run with -p|--print-cipher, this value determines the sampling
++# rate (number of requests) for printing the cipher used
++#
++cipher-interval = 200
++
++#
+ # Login URL. This is the first URL to be hit by every siege
+ # client. This feature was designed to allow you to login to 
+ # a server and establish a session. It will only be hit once
+diff -Naur siege-2.78/include/joedog/joedog.h siege-2.78-modif/include/joedog/joedog.h
+--- siege-2.78/include/joedog/joedog.h	2010-05-16 07:11:09.000000000 -0700
++++ siege-2.78-modif/include/joedog/joedog.h	2020-04-29 17:39:49.188809819 -0700
+@@ -25,6 +25,11 @@
+ #include <time.h>  
+ #include <stdarg.h>
+ 
++#ifdef HAVE_STDINT_H
++# include <stdint.h>
++# include <inttypes.h>
++#endif /* HAVE_STDINT_H */
++
+ #define BLACK      0
+ #define RED        1
+ #define GREEN      2
+@@ -66,7 +71,7 @@
+ void  reverse(char []);
+ int   my_random(int, int);
+ char  *substring(char *, int, int);
+-float elapsed_time(clock_t);
++uint64_t get_timestamp();
+ 
+ /**
+  * snprintf functions
+diff -Naur siege-2.78/lib/joedog/util.c siege-2.78-modif/lib/joedog/util.c
+--- siege-2.78/lib/joedog/util.c	2009-05-07 07:36:54.000000000 -0700
++++ siege-2.78-modif/lib/joedog/util.c	2020-04-29 17:39:49.188809819 -0700
+@@ -94,11 +94,8 @@
+   } /** end of for     **/
+ }   /** end of reverse **/
+ 
+-float 
+-elapsed_time( clock_t time )
+-{
+-  long tps = sysconf( _SC_CLK_TCK );
+-  return (float)time/tps;
+-}
+-
+-
++uint64_t get_timestamp() {
++  struct timespec ts;
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++  return ((uint64_t)ts.tv_sec * 1000000) + (ts.tv_nsec/1000);
++}
+\ No newline at end of file
+diff -Naur siege-2.78/lib/joedog/util.h siege-2.78-modif/lib/joedog/util.h
+--- siege-2.78/lib/joedog/util.h	2007-03-27 12:10:55.000000000 -0700
++++ siege-2.78-modif/lib/joedog/util.h	2020-04-29 17:39:49.188809819 -0700
+@@ -28,6 +28,11 @@
+ # include <config.h>
+ #endif /* HAVE_CONFIG_H */ 
+ 
++#ifdef HAVE_STDINT_H
++# include <stdint.h>
++# include <inttypes.h>
++#endif /* HAVE_STDINT_H */
++
+ #ifdef STDC_HEADERS
+ # include <string.h>
+ #else
+@@ -68,7 +73,7 @@
+ void   reverse(char []);
+ int    my_random(int, int);
+ char   *substring(char *, int, int);
+-float  elapsed_time(clock_t);
++uint64_t get_timestamp();
+ 
+ #endif  /* UTIL_H */
+ 
+diff -Naur siege-2.78/src/client.c siege-2.78-modif/src/client.c
+--- siege-2.78/src/client.c	2013-03-11 05:43:22.000000000 -0700
++++ siege-2.78-modif/src/client.c	2020-04-29 17:54:19.268806500 -0700
+@@ -58,8 +58,8 @@
+ #ifdef SIGNAL_CLIENT_PLATFORM
+ static pthread_once_t once = PTHREAD_ONCE_INIT;
+ #endif/*SIGNAL_CLIENT_PLATFORM*/
+-float highmark = 0;
+-float lowmark = -1;  
++uint64_t highmark = 0;
++uint64_t lowmark = 18446744073709551615U;  
+ 
+ /**
+  * The thread entry point for clients.
+@@ -119,6 +119,8 @@
+   }
+ 
+   for (x = 0, y = 0; x < my.reps; x++, y++) {
++    if (crew_get_shutdown(client->crew) && my.secs > 0)
++      break;
+     x = ((my.secs > 0) && ((my.reps <= 0)||(my.reps == MAXREPS))) ? 0 : x;
+     if (my.internet == TRUE) {
+       y = (unsigned int) (((double)pthread_rand_np(&(client->rand_r_SEED)) /
+@@ -182,8 +184,8 @@
+ {
+   unsigned long bytes  = 0;
+   int      code, fail;  
+-  float    etime; 
+-  clock_t  start, stop;
++  uint64_t    etime; 
++  uint64_t  start, stop;
+   struct   tms t_start, t_stop; 
+   HEADERS  *head; 
+ #ifdef  HAVE_LOCALTIME_R
+@@ -246,7 +248,7 @@
+   C->prot = U->protocol;
+ 
+   /* record transaction start time */
+-  start = times(&t_start);  
++  start = get_timestamp();  
+ 
+   debug ( 
+     "%s:%d attempting connection to %s:%d", 
+@@ -330,8 +332,8 @@
+     debug ("%s:%d zero bytes back from server", __FILE__, __LINE__);
+     return FALSE; 
+   } 
+-  stop     =  times(&t_stop); 
+-  etime    =  elapsed_time(stop - start);  
++  stop     =  get_timestamp(); 
++  etime    =  (stop - start) / 1000; // micros to miliseconds
+   code     =  (head->code <  400 || head->code == 401 || head->code == 407) ? 1 : 0;
+   fail     =  (head->code >= 400 && head->code != 401 && head->code != 407) ? 1 : 0; 
+   /**
+@@ -351,7 +353,7 @@
+   if (etime > highmark) {
+     highmark = etime;
+   }
+-  if ((lowmark < 0) || (etime < lowmark)) {
++  if (etime < lowmark) {
+     lowmark = etime;
+   }
+   client->bigtime = highmark;
+@@ -365,24 +367,24 @@
+     char *time_str = (my.timestamp==TRUE)?timestamp():"";
+     if (my.csv) {
+       if (my.display)
+-        DISPLAY(color, "%s%s%s%4d,%s,%d,%6.2f,%7lu,%s,%d,%s",
++        DISPLAY(color, "%s%s%s%4d,%s,%d,%" PRIu64 ",%7lu,%s,%d,%s",
+         time_str, (my.mark)?my.markstr:"", (my.mark)?",":"", client->id, head->head, head->code, 
+         etime, bytes, (my.fullurl)?U->url:U->pathname, U->urlid, fmtime
+       );
+       else
+-        DISPLAY(color, "%s%s%s%s,%d,%6.2f,%7lu,%s,%d,%s",
++        DISPLAY(color, "%s%s%s%s,%d,%" PRIu64 ",%7lu,%s,%d,%s",
+           time_str, (my.mark)?my.markstr:"", (my.mark)?",":"", head->head, head->code, 
+           etime, bytes, (my.fullurl)?U->url:U->pathname, U->urlid, fmtime
+         );
+     } else {
+       if (my.display)
+         DISPLAY(
+-          color, "%s%4d: %s %d %6.2f secs: %7lu bytes ==> %-6s %s", client->id,
++          color, "%s%4d: %s %d %" PRIu64 " msecs: %7lu bytes ==> %-6s %s", client->id,
+           time_str, head->head, head->code, etime, bytes, calltype_name(U->calltype), (my.fullurl)?U->url:U->pathname
+         ); 
+       else
+         DISPLAY ( 
+-          color, "%s%s %d %6.2f secs: %7lu bytes ==> %-6s %s", 
++          color, "%s%s %d %" PRIu64 " msecs: %7lu bytes ==> %-6s %s", 
+           time_str, head->head, head->code, etime, bytes, calltype_name(U->calltype), (my.fullurl)?U->url:U->pathname
+         );
+     } /* else not my.csv */
+diff -Naur siege-2.78/src/client.h siege-2.78-modif/src/client.h
+--- siege-2.78/src/client.h	2008-07-25 06:49:24.000000000 -0700
++++ siege-2.78-modif/src/client.h	2020-04-29 17:39:49.192809819 -0700
+@@ -27,6 +27,7 @@
+ # include <config.h>
+ #endif /* HAVE_CONFIG_H */
+ #include <setup.h>
++#include <crew.h>
+ #include <joedog/joedog.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+@@ -74,11 +75,12 @@
+       TYPE proxy;
+     } type;
+   } auth;
++  CREW crew;
+   int      status;
+-  float    time;
++  uint64_t    time;
+   unsigned int rand_r_SEED;
+-  float bigtime;
+-  float smalltime;
++  uint64_t bigtime;
++  uint64_t smalltime;
+ } CLIENT;
+ 
+ void * start_routine(CLIENT *client);
+diff -Naur siege-2.78/src/crew.c siege-2.78-modif/src/crew.c
+--- siege-2.78/src/crew.c	2009-05-08 10:40:30.000000000 -0700
++++ siege-2.78-modif/src/crew.c	2020-04-29 17:41:54.284809342 -0700
+@@ -29,24 +29,6 @@
+ 
+ private void *crew_thread(void *);
+ 
+-struct CREW_T
+-{
+-  int              size;
+-  int              maxsize;
+-  int              cursize;
+-  int              total;
+-  WORK             *head;
+-  WORK             *tail;
+-  BOOLEAN          block;
+-  BOOLEAN          closed;
+-  BOOLEAN          shutdown;
+-  pthread_t        *threads;
+-  pthread_mutex_t  lock;
+-  pthread_cond_t   not_empty;
+-  pthread_cond_t   not_full;
+-  pthread_cond_t   empty;
+-};
+-
+ CREW
+ new_crew(int size, int maxsize, BOOLEAN block)
+ {
+@@ -255,7 +237,9 @@
+     }
+   }
+ 
+-  crew->shutdown = TRUE;
++  if (my.secs < 0) {
++    crew->shutdown = TRUE;
++  }
+ 
+   if((c = pthread_mutex_unlock(&(crew->lock))) != 0){
+     NOTIFY(FATAL, "pthread_mutex_unlock");
+diff -Naur siege-2.78/src/crew.h siege-2.78-modif/src/crew.h
+--- siege-2.78/src/crew.h	2006-04-17 11:37:34.000000000 -0700
++++ siege-2.78-modif/src/crew.h	2020-04-29 17:39:49.192809819 -0700
+@@ -33,6 +33,24 @@
+   struct work   *next;
+ } WORK;
+ 
++struct CREW_T
++{
++  int              size;
++  int              maxsize;
++  int              cursize;
++  int              total;
++  WORK             *head;
++  WORK             *tail;
++  BOOLEAN          block;
++  BOOLEAN          closed;
++  BOOLEAN          shutdown;
++  pthread_t        *threads;
++  pthread_mutex_t  lock;
++  pthread_cond_t   not_empty;
++  pthread_cond_t   not_full;
++  pthread_cond_t   empty;
++};
++
+ typedef struct CREW_T *CREW;
+ 
+ CREW    new_crew(int size, int maxsize, BOOLEAN block);
+diff -Naur siege-2.78/src/data.c siege-2.78-modif/src/data.c
+--- siege-2.78/src/data.c	2009-05-08 10:40:06.000000000 -0700
++++ siege-2.78-modif/src/data.c	2020-04-29 17:39:49.188809819 -0700
+@@ -24,8 +24,8 @@
+   float    total;  /*ttime*/
+   float    available;
+   float    failed;
+-  float    lowest;
+-  float    highest;
++  uint64_t    lowest;
++  uint64_t    highest;
+   float    elapsed;
+   clock_t  start;   
+   clock_t  stop;      
+@@ -49,8 +49,8 @@
+   this->count     = 0.0;
+   this->ok200     = 0;
+   this->failed    = 0.0;
+-  this->lowest    =  -1;
+-  this->highest   = 0.0;
++  this->lowest    = 18446744073709551615U;
++  this->highest   = 0;
+   this->elapsed   = 0.0;
+   this->bytes     = 0.0;
+   return this;
+@@ -80,7 +80,7 @@
+ void 
+ data_increment_total(DATA this, float total)
+ {
+-  this->total += total;
++  this->total += ((float)total) / 1000;
+   return;
+ }
+ 
+@@ -120,7 +120,7 @@
+ }
+ 
+ void
+-data_set_highest(DATA this, float highest)
++data_set_highest(DATA this, uint64_t highest)
+ {
+   if(this->highest < highest){
+     this->highest = highest;
+@@ -129,9 +129,9 @@
+ }
+ 
+ void
+-data_set_lowest(DATA this, float lowest)
++data_set_lowest(DATA this, uint64_t lowest)
+ {
+-  if((this->lowest <= 0)||(this->lowest > lowest)){
++  if(this->lowest > lowest){
+     this->lowest = lowest;
+   }
+   return;
+@@ -173,13 +173,13 @@
+   return (float)this->bytes;
+ }
+ 
+-float
++uint64_t
+ data_get_highest(DATA this)
+ {
+   return this->highest;
+ }
+ 
+-float
++uint64_t
+ data_get_lowest(DATA this)
+ {
+   if(this->code){
+diff -Naur siege-2.78/src/data.h siege-2.78-modif/src/data.h
+--- siege-2.78/src/data.h	2007-04-12 08:11:44.000000000 -0700
++++ siege-2.78-modif/src/data.h	2020-04-29 17:39:49.188809819 -0700
+@@ -8,6 +8,9 @@
+ # include <sys/times.h>
+ #endif/*HAVE_SYS_TIMES_H*/
+ 
++#include <stdint.h>
++#include <inttypes.h>
++
+ #if TIME_WITH_SYS_TIME
+ # include <sys/time.h>
+ # include <time.h>
+@@ -28,8 +31,8 @@
+ /* setters */
+ void  data_set_start      (DATA this);
+ void  data_set_stop       (DATA this);
+-void  data_set_highest    (DATA this, float highest);
+-void  data_set_lowest     (DATA this, float lowest);
++void  data_set_highest    (DATA this, uint64_t highest);
++void  data_set_lowest     (DATA this, uint64_t lowest);
+ void  data_increment_bytes(DATA this, unsigned long bytes);
+ void  data_increment_count(DATA this, unsigned long count);
+ void  data_increment_total(DATA this, float total);
+@@ -41,8 +44,8 @@
+ float    data_get_total(DATA this);
+ float    data_get_bytes(DATA this);
+ float    data_get_megabytes(DATA this);
+-float    data_get_highest(DATA this);
+-float    data_get_lowest(DATA this);
++uint64_t    data_get_highest(DATA this);
++uint64_t    data_get_lowest(DATA this);
+ float    data_get_elapsed(DATA this);
+ float    data_get_availability(DATA this);
+ float    data_get_response_time(DATA this);
+diff -Naur siege-2.78/src/handler.c siege-2.78-modif/src/handler.c
+--- siege-2.78/src/handler.c	2009-05-08 10:39:50.000000000 -0700
++++ siege-2.78-modif/src/handler.c	2020-04-29 17:39:49.192809819 -0700
+@@ -77,8 +77,7 @@
+   sigwait(&sigs, &gotsig);
+   my.verbose = FALSE;
+   fprintf(stderr, "\nLifting the server siege..."); 
+-//  crew_set_shutdown(crew, TRUE);
+-  crew_cancel(crew);
++  crew_set_shutdown(crew, TRUE);
+ 
+ 
+ #if defined (hpux) || defined(__hpux)
+diff -Naur siege-2.78/src/init.c siege-2.78-modif/src/init.c
+--- siege-2.78/src/init.c	2013-02-07 11:59:05.000000000 -0800
++++ siege-2.78-modif/src/init.c	2020-04-29 17:39:49.192809819 -0700
+@@ -537,7 +537,10 @@
+     }
+     else if (strmatch(option, "ssl-ciphers")) {
+       my.ssl_ciphers = stralloc(value);
+-    } 
++    }
++    else if (strmatch(option, "cipher-interval")) {
++      my.cipher_interval = atoi(value);
++    }
+     else if (strmatch(option, "spinner")) {
+       if (!strncasecmp(value, "true", 4))
+         my.spinner = TRUE;
+diff -Naur siege-2.78/src/main.c siege-2.78-modif/src/main.c
+--- siege-2.78/src/main.c	2013-02-07 05:00:03.000000000 -0800
++++ siege-2.78-modif/src/main.c	2020-04-29 17:56:52.008805917 -0700
+@@ -77,6 +77,7 @@
+   { "header",       required_argument, NULL, 'H' },
+   { "user-agent",   required_argument, NULL, 'A' },
+   { "content-type", required_argument, NULL, 'T' },
++  { "print-cipher", optional_argument, NULL, 'p' },
+   {0, 0, 0, 0} 
+ };
+ 
+@@ -255,6 +256,9 @@
+         if(optarg == NULL) break; /*paranoia*/
+         strncpy(my.file, optarg, strlen(optarg));
+         break;
++      case 'p':
++          my.print_cipher = TRUE;
++          break;
+       case 'A':
+         strncpy(my.uagent, optarg, 255);
+         break;
+@@ -347,6 +351,10 @@
+     display_help();
+   }
+ 
++  if (my.print_cipher && my.cipher_interval == 0) {
++      my.cipher_interval = 1000; // make sure we don't get division by 0 error
++  }
++
+   /* cookie is an EXTERN, defined in setup */ 
+   cookie = xcalloc(sizeof(COOKIE), 1); 
+   cookie->first = NULL;
+@@ -410,13 +418,6 @@
+   pthread_attr_setdetachstate(&scope_attr, PTHREAD_CREATE_JOINABLE);
+ #endif
+ 
+-  /** 
+-   * invoke OpenSSL's thread safety
+-   */
+-#ifdef HAVE_SSL
+-  SSL_thread_setup();
+-#endif
+-
+   /**
+    * create the signal handler and timer;  the
+    * signal handler thread (cease) responds to
+@@ -444,11 +445,13 @@
+     client[x].ok200           = 0;   
+     client[x].fail            = 0; 
+     client[x].U               = urls;
++    client[x].smalltime       = 18446744073709551615U;
+     client[x].auth.www        = 0;
+     client[x].auth.proxy      = 0;
+     client[x].auth.type.www   = BASIC;
+     client[x].auth.type.proxy = BASIC;
+     client[x].rand_r_SEED     = urandom();
++    client[x].crew            = crew;
+     result = crew_add(crew, (void*)start_routine, &(client[x]));
+     if (result == FALSE) { 
+       my.verbose = FALSE;
+@@ -461,10 +464,6 @@
+ 
+   crew_join(crew, TRUE, &statusp);
+ 
+-#ifdef HAVE_SSL
+-  SSL_thread_cleanup();
+-#endif
+-
+   /**
+    * collect all the data from all the threads that
+    * were spawned by the run.
+@@ -542,7 +541,7 @@
+   );
+   fprintf(stderr, "Elapsed time:\t\t%12.2f secs\n",        data_get_elapsed(D));
+   fprintf(stderr, "Data transferred:\t%12.2f MB\n",        data_get_megabytes(D)); /*%12llu*/
+-  fprintf(stderr, "Response time:\t\t%12.2f secs\n",       data_get_response_time(D));
++  fprintf(stderr, "Response time:\t\t%12.3f secs\n",       data_get_response_time(D));
+   fprintf(stderr, "Transaction rate:\t%12.2f trans/sec\n", data_get_transaction_rate(D));
+   fprintf(stderr, "Throughput:\t\t%12.2f MB/sec\n",        data_get_throughput(D));
+   fprintf(stderr, "Concurrency:\t\t%12.2f\n",              data_get_concurrency(D));
+@@ -551,8 +550,8 @@
+     fprintf(stderr, "HTTP OK received:\t%12u\n",             data_get_ok200(D));
+   }
+   fprintf(stderr, "Failed transactions:\t%12u\n",          my.failed);
+-  fprintf(stderr, "Longest transaction:\t%12.2f\n",        data_get_highest(D));
+-  fprintf(stderr, "Shortest transaction:\t%12.2f\n",       data_get_lowest(D));
++  fprintf(stderr, "Longest transaction:\t\t%" PRIu64 " msecs\n",        data_get_highest(D));
++  fprintf(stderr, "Shortest transaction:\t\t%" PRIu64 " msecs\n",       data_get_lowest(D));
+   fprintf(stderr, " \n");
+   if(my.mark)    mark_log_file(my.markstr);
+   if(my.logging) log_transaction(D);
+diff -Naur siege-2.78/src/setup.h siege-2.78-modif/src/setup.h
+--- siege-2.78/src/setup.h	2013-02-07 04:58:37.000000000 -0800
++++ siege-2.78-modif/src/setup.h	2020-04-29 17:39:49.192809819 -0700
+@@ -210,6 +210,8 @@
+   BOOLEAN zero_ok;      /* boolean, TRUE == zero bytes data is OK. */ 
+   BOOLEAN spinner;      /* boolean, TRUE == spin, FALSE not so much*/
+   BOOLEAN cache;        /* boolean, TRUE == cache revalidate       */
++  BOOLEAN print_cipher;  /* boolean, TRUE == print SSL cipher used  */
++  int     cipher_interval; /* print SSL cipher every cipherinterval requests  */
+   char    rc[256];      /* filename of SIEGERC file                */  
+   int     ssl_timeout;  /* SSL session timeout                     */
+   char    *ssl_cert;    /* PEM certificate file for client auth    */
+diff -Naur siege-2.78/src/sock.h siege-2.78-modif/src/sock.h
+--- siege-2.78/src/sock.h	2012-09-17 13:04:56.000000000 -0700
++++ siege-2.78-modif/src/sock.h	2020-04-29 17:39:49.192809819 -0700
+@@ -113,6 +113,7 @@
+   SSL_CTX    *ctx;
+   SSL_METHOD *method;
+   X509       *cert;
++  int        cipher_count;
+ #else 
+   BOOLEAN     nossl;
+ #endif/*HAVE_SSL*/
+diff -Naur siege-2.78/src/ssl.c siege-2.78-modif/src/ssl.c
+--- siege-2.78/src/ssl.c	2009-05-08 10:58:01.000000000 -0700
++++ siege-2.78-modif/src/ssl.c	2020-04-29 17:39:49.192809819 -0700
+@@ -48,18 +48,8 @@
+ #include <errno.h>
+ #include <joedog/defs.h>
+ 
+-/**
+- * local variables and prototypes
+- */
+-#ifdef  HAVE_SSL
+-static pthread_mutex_t *lock_cs;
+-static long            *lock_count;
+-#endif/*HAVE_SSL*/
+-
+-unsigned long SSL_pthreads_thread_id(void);
+ #ifdef  HAVE_SSL
+ private  void SSL_error_stack(void); 
+-private  void SSL_pthreads_locking_callback(int m, int t, char *f, int l);
+ #endif/*HAVE_SSL*/
+ 
+ BOOLEAN
+@@ -135,6 +125,22 @@
+   }
+   SSL_set_fd(C->ssl, C->sock);
+   serr = SSL_connect(C->ssl);
++  if (serr != 1) {
++    SSL_error_stack();
++    NOTIFY(ERROR, "Failed to make an SSL connection: %d", SSL_get_error(C->ssl, serr));
++    return FALSE;
++  }
++
++  if (my.print_cipher) { // print cipher used for connection
++    const SSL_CIPHER* c = SSL_get_current_cipher(C->ssl);
++    if (C->cipher_count == 0) {
++      NOTIFY(DEBUG, "### %s, %s, Cipher is %s",
++               (SSL_session_reused(C->ssl) ? "Reused" : "New"),
++               SSL_CIPHER_get_version(c),
++               SSL_CIPHER_get_name(c));
++    }
++    C->cipher_count = (C->cipher_count + 1) % my.cipher_interval;
++  }
+   return TRUE;
+ #else
+   C->nossl = TRUE;
+@@ -148,84 +154,6 @@
+  * the OpenSSL distribution.
+  */
+ #ifdef HAVE_SSL
+-void 
+-SSL_thread_setup( void ) 
+-{
+-  int x;
+- 
+-#define OPENSSL_THREAD_DEFINES
+-#include <openssl/opensslconf.h>
+-#if defined(THREADS) || defined(OPENSSL_THREADS)
+-#else
+-   fprintf(
+-    stderr, 
+-    "WARNING: your openssl libraries were compiled without thread support\n"
+-   );
+-   pthread_sleep_np( 2 );
+-#endif
+-
+-  SSL_library_init();
+-  SSL_load_error_strings();
+-  lock_cs    = (pthread_mutex_t*)OPENSSL_malloc(
+-    CRYPTO_num_locks()*sizeof(pthread_mutex_t)
+-  );
+-  lock_count = (long*)OPENSSL_malloc(
+-    CRYPTO_num_locks() * sizeof(long)
+-  );
+-
+-  for( x = 0; x < CRYPTO_num_locks(); x++ ){
+-    lock_count[x] = 0;
+-    pthread_mutex_init(&(lock_cs[x]), NULL);
+-  }
+-  CRYPTO_set_id_callback((unsigned long (*)())SSL_pthreads_thread_id);
+-  CRYPTO_set_locking_callback((void (*)())SSL_pthreads_locking_callback);
+-}
+-
+-void 
+-SSL_thread_cleanup(void) 
+-{
+-  int x;
+-  
+-  CRYPTO_set_locking_callback(NULL);
+-  for(x = 0; x < CRYPTO_num_locks(); x++){
+-    pthread_mutex_destroy(&(lock_cs[x]));
+-  }
+-  if(lock_cs!=(pthread_mutex_t *)NULL) { 
+-    OPENSSL_free(lock_cs); 
+-    lock_cs=(pthread_mutex_t *)NULL; 
+-  }
+-  if(lock_count!=(long *)NULL){ 
+-    OPENSSL_free(lock_count); 
+-    lock_count=(long *)NULL; 
+-  }
+-}
+-
+-void 
+-SSL_pthreads_locking_callback(int mode, int type, char *file, int line) 
+-{
+-  if( my.debug == 4 ){
+-    fprintf(
+-      stderr,"thread=%4d mode=%s lock=%s %s:%d\n", (int)CRYPTO_thread_id(),
+-      (mode&CRYPTO_LOCK)?"l":"u", (type&CRYPTO_READ)?"r":"w",file,line
+-    );
+-  }
+-  if(mode & CRYPTO_LOCK){
+-    pthread_mutex_lock(&(lock_cs[type]));
+-    lock_count[type]++;
+-  } 
+-  else{ 
+-    pthread_mutex_unlock(&(lock_cs[type]));
+-  }
+-}
+-
+-unsigned long 
+-SSL_pthreads_thread_id(void) 
+-{
+-  unsigned long ret;
+-  ret = (unsigned long)pthread_self();
+-
+-  return(ret);
+-}
+ 
+ static void 
+ SSL_error_stack(void) { /* recursive dump of the error stack */
+@@ -240,4 +168,4 @@
+   NOTIFY(ERROR, "stack: %lX : %s", err, string);
+ } 
+ 
+-#endif/*HAVE_SSL*/
++#endif/*HAVE_SSL*/
+\ No newline at end of file

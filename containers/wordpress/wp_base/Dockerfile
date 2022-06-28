@@ -123,7 +123,9 @@ RUN cd /home/${USERNAME}; \
     wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
     tar zxf ${SIEGE_VERSION}.tar.gz
 WORKDIR /home/${USERNAME}/${SIEGE_VERSION}
-RUN ./utils/bootstrap && \
+COPY files/siege-miliseconds-ssl.patch ./
+RUN patch -p1 < siege-miliseconds-ssl.patch; \
+    ./utils/bootstrap && \
     automake --add-missing && \
     ./configure --with-ssl=/usr/bin/openssl  && \
     make -j && \
