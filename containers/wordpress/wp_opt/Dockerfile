@@ -34,7 +34,7 @@ COPY files/0001-BOLT-PHP${PHP_VER}-GCC-option.patch ./
 COPY files/0001-JIT-buffer-relocation-and-2-PHP${PHP_VER}-performance.patch ./
 RUN docker-php-source extract; \
   patch -p1 < 0001-BOLT-PHP${PHP_VER}-GCC-option.patch; \
-  patch -p1 < 0001-JIT-buffer-relocation-and-2-PHP${PHP_VER}-performance.patch; \
+#  patch -p1 < 0001-JIT-buffer-relocation-and-2-PHP${PHP_VER}-performance.patch; \
   ./configure \
   --enable-fpm \
   --with-mysqli \
@@ -194,6 +194,7 @@ RUN git clone --depth 1 -b $QAT_ENGINE_TAG https://github.com/intel/QAT_Engine.g
     cd qat_engine && \
     ./autogen.sh && \
     ./configure \
+        --enable-qat_sw \
         --enable-multibuff_offload \
         --enable-ipsec_offload \
         --with-ipsec_install_dir=/home/${USERNAME}/temp/ipsec \
@@ -247,24 +248,6 @@ RUN sudo -E apt-get update && sudo -E apt-get install -y \
     nasm
 
 
-# Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
-RUN if [ "$iodlrlp" = "1" ] ; then \
-    cd /home/${USERNAME} && \
-    git clone https://github.com/intel/iodlr && \
-    cd iodlr && \
-    git checkout 01f4985 && \
-    cd large_page-c && \
-    make -f Makefile.preload && \
-    sudo cp liblppreload.so /usr/lib/ && \
-    sudo sed -i 's/\/usr\/bin\/mysqld_safe/LD_PRELOAD=\/usr\/lib\/liblppreload.so \/usr\/bin\/mysqld_safe/' /etc/init.d/mysql && \
-    rm -rf /home/${USERNAME}/iodlr/ ; \
-    fi
-
-ARG mariadbconf=1s
-# Optimization: Query cache optimization for single socket operation (unless over-ridden)
-RUN if [ "$query" = "1" ] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
-
-
 # Binary copy AYNCH NGINX with QAT, 
 COPY  --from=dep-components --chown=${USERNAME}:root $INSTALL_DIR /
 
@@ -281,10 +264,13 @@ ARG QAT_ENGINE_TAG
 ARG ASYNCH_NGINX_TAG
 ARG IPSEC_MB_TAG
 
+ARG iodlrlp=1
+ARG query=1
+
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
 RUN if [ "$iodlrlp" = "1" ] ; then \
     cd /home/${USERNAME} && \
-    git clone --depth 1 -b 01f4985 https://github.com/intel/iodlr && \
+    git clone --depth 1 -b v1.0.0 https://github.com/intel/iodlr && \
     cd iodlr && \
     cd large_page-c && \
     make -f Makefile.preload && \
@@ -326,6 +312,7 @@ RUN git clone --depth 1 -b $QAT_ENGINE_TAG https://github.com/intel/QAT_Engine.g
     cd qat_engine && \
     ./autogen.sh && \
     ./configure \
+        --enable-qat_sw \
         --enable-multibuff_offload \
         --enable-ipsec_offload \
         --with-ipsec_install_dir=/home/${USERNAME}/temp/ipsec \
