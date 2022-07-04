@@ -235,7 +235,7 @@ COPY  --from=dep-components --chown=${USERNAME}:root $INSTALL_DIR /
 WORKDIR /home/${USERNAME}/certificates
 RUN sed -iE 's/RANDFILE\(\s+\=\s\$ENV\:\:HOME\/\.rnd\)/#RANDFILE\1/' /etc/ssl/openssl.cnf && \
     mkdir -p /home/${USERNAME}/certificates/ssl && \
-    openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \
+    openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:4096 -keyout server.key -out server.crt -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \
     openssl ecparam -genkey -out key.pem -name secp384r1 && \
     openssl req -x509 -new -key key.pem -out cert.pem  -subj "/C=US/ST=OR/L=IN/O=IN/OU=IN/CN=$(hostname)" && \ 
     chown -R ${USERNAME} /home/${USERNAME}/certificates
