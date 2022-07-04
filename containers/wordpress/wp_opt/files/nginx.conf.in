@@ -68,10 +68,10 @@ http {
 
     ssl_session_timeout  300s;
     ssl_prefer_server_ciphers   on;
-    ssl_protocols  TLSv1.2; #or TLSv1.3;
+    ssl_protocols  TLSv1.3; #or TLSv1.3;
 
     ####### comment following line for TLSv1.3
-    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256;
+    #ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256;
 
     ssl_ecdh_curve secp384r1;
 
