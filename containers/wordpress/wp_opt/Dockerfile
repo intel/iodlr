@@ -267,6 +267,9 @@ ARG IPSEC_MB_TAG
 ARG iodlrlp=1
 ARG query=1
 
+# Optimization: Set environment variable to have zend use large pages
+ENV USE_ZEND_ALLOC_HUGE_PAGES=1
+
 # Optimization: Build and install iodlr huge pages library (commit_id: 01f4985) for use with mariadb
 RUN if [ "$iodlrlp" = "1" ] ; then \
     cd /home/${USERNAME} && \
