@@ -254,8 +254,8 @@ COPY  --from=dep-components --chown=${USERNAME}:root $INSTALL_DIR /
 
 WORKDIR /home/${USERNAME}/oss-performance
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
-COPY --from=bolter --chown=pkb:pkb /opt/php-fpm.bolt /home/${USERNAME}/oss-performance/php-fpm
-COPY --from=bolter --chown=pkb:pkb /opt/opcache.so /home/${USERNAME}/oss-performance/
+COPY --from=bolter --chown=${USERNAME}:${USERNAME} /opt/php-fpm.bolt /home/${USERNAME}/oss-performance/php-fpm
+COPY --from=bolter --chown=${USERNAME}:${USERNAME} /opt/opcache.so /home/${USERNAME}/oss-performance/
 
 
 
