@@ -3,7 +3,7 @@ ARG PHP_VER
 ARG INSTALL_DIR="/pkg_install"
 
 ARG IPP_CRYPTO_TAG=ippcp_2021.3
-ARG QAT_ENGINE_TAG=v0.6.1
+ARG QAT_ENGINE_TAG=v0.6.5
 ARG ASYNCH_NGINX_TAG=v0.4.7
 ARG IPSEC_MB_TAG=v0.55
 
@@ -108,119 +108,6 @@ llvm-bolt \
  -dyno-stats;
 
 
-# ----- The container for building the components-----
-# build siege, openssl, async Nginx ...
-# to copy the binary to worker container
-# ----------------------------------------------------
-FROM $baseimage AS dep-components
-ARG DEBIAN_FRONTEND="noninteractive"
-ARG TZ="America/Los_Angeles"
-ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
-
-ARG INSTALL_DIR
-USER root
-RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    gcc-10 \
-    g++-10 \
-    software-properties-common \
-    apt-transport-https \
-    git \
-    automake \
-    gcc \
-    make \
-    cmake \
-    wget \
-    libevent-dev \
-    vim \
-    python3-pip \
-    sudo \
-    autotools-dev \
-    autoconf \
-    build-essential \
-    zlib1g \
-    zlib1g-dev \
-    sysstat \
-    linux-tools-common \
-    ruby \
-    python3-dev \
-    libssl-dev \
-    ninja-build \
-    libjemalloc-dev \
-    pkg-config \
-    build-essential \
-    autoconf \
-    bison \ 
-    re2c \
-    libxml2-dev \
-    libsqlite3-dev \
-    php-mysql \
-    php \
-    libpcre3 \
-    libpcre3-dev \
-    libonig5 \
-    libtool \
-    nasm
-
-# Build/Install IPP cyrypto library for the multi-buffer support
-WORKDIR /home/${USERNAME}/temp
-ARG IPP_CRYPTO_TAG
-RUN git clone --depth 1 -b $IPP_CRYPTO_TAG https://github.com/intel/ipp-crypto.git && \
-    cd ipp-crypto && \
-    cd sources/ippcp/crypto_mb && \
-    CXX=g++-10 CC=gcc-10 cmake . -B./build -DOPENSSL_INCLUDE_DIR=/home/${USERNAME}/openssl_install/include/ -DOPENSSL_LIBRARIES=/home/${USERNAME}/openssl_install/ -DOPENSSL_ROOT_DIR=/home/${USERNAME}/temp/openssl/ && \
-    cd build && \
-    make -j && \
-    mkdir -p /home/${USERNAME}/crypto_mb/lib && \
-    cp /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/build/bin/libcrypto_mb.so /home/${USERNAME}/crypto_mb/lib/ && \
-    cp -r /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/include /home/${USERNAME}/crypto_mb/
-#    cp -r /home/${USERNAME}/crypto_mb $INSTALL_DIR/
-
-# Build/install IPSec_MB library
-ARG IPSEC_MB_TAG
-WORKDIR /home/${USERNAME}/temp
-RUN mkdir ipsec && \
-    git clone --depth 1 -b $IPSEC_MB_TAG https://github.com/intel/intel-ipsec-mb.git && \
-    cd intel-ipsec-mb/ && \
-    make -j && \
-#    make install PREFIX=$INSTALL_DIR/ipsec && \
-    make install PREFIX=/home/${USERNAME}/temp/ipsec
-
-
-# Build/Install QAT engine
-ARG QAT_ENGINE_TAG
-WORKDIR /home/${USERNAME}/temp
-RUN git clone --depth 1 -b $QAT_ENGINE_TAG https://github.com/intel/QAT_Engine.git qat_engine && \
-    cd qat_engine && \
-    ./autogen.sh && \
-    ./configure \
-        --enable-qat_sw \
-        --enable-multibuff_offload \
-        --enable-ipsec_offload \
-        --with-ipsec_install_dir=/home/${USERNAME}/temp/ipsec \
-        --with-multibuff_install_dir=/home/${USERNAME}/crypto_mb \
-        --with-openssl_install_dir=/home/${USERNAME}/openssl_install && \
-    make -j && \
-    make install
-
-ARG ASYNCH_NGINX_TAG
-# Build/Install AYNCH NGINX, no QAT
-WORKDIR /home/${USERNAME}/nginx_build
-RUN rm -rf nginx && \
-    git clone --depth 1 -b $ASYNCH_NGINX_TAG https://github.com/intel/asynch_mode_nginx.git nginx && \
-    cd nginx && \
-    ./configure --prefix=/usr/ \
-        --with-http_ssl_module --add-dynamic-module=modules/nginx_qat_module \
-        --with-cc-opt="-DNGX_SECURE_MEM \
-        -I /home/${USERNAME}/openssl_install/include \
-        -Wno-error=deprecated-declarations -Wimplicit-fallthrough=0" \
-        --with-ld-opt="-Wl,-rpath=/home/${USERNAME}/openssl_install/lib \
-        -L /home/${USERNAME}/openssl_install/lib" && \
-    make -j && \
-    make install DESTDIR=$INSTALL_DIR && \
-    rm -rf /home/${USERNAME}/nginx_build
-
-
 # --------------- opt container ---------------
 FROM $baseimage
 MAINTAINER "ping.zhao@intel.com"
@@ -245,17 +132,15 @@ RUN sudo -E apt-get update && sudo -E apt-get install -y \
     autotools-dev \
     autoconf \
     libtool \
+    pkg-config \
     nasm
 
-
-# Binary copy AYNCH NGINX with QAT, 
-COPY  --from=dep-components --chown=${USERNAME}:root $INSTALL_DIR /
 
 
 WORKDIR /home/${USERNAME}/oss-performance
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
-COPY --from=bolter --chown=${USERNAME}:${USERNAME} /opt/php-fpm.bolt /home/${USERNAME}/oss-performance/php-fpm
-COPY --from=bolter --chown=${USERNAME}:${USERNAME} /opt/opcache.so /home/${USERNAME}/oss-performance/
+COPY --from=bolter --chown=${USERNAME}:root /opt/php-fpm.bolt /home/${USERNAME}/oss-performance/php-fpm
+COPY --from=bolter --chown=${USERNAME}:root /opt/opcache.so /home/${USERNAME}/oss-performance/
 
 
 
@@ -286,48 +171,71 @@ ARG mariadbconf=1s
 # Optimization: Query cache optimization for single socket operation (unless over-ridden)
 RUN if [ "$query" = "1" ] ; then sudo cp /home/${USERNAME}/${mariadbconf}-bkm.j2 /etc/mysql/my.cnf ; fi
 
-USER root
+
+WORKDIR /home/${USERNAME}/
+RUN wget http://archive.ubuntu.com/ubuntu/pool/universe/n/nasm/nasm_2.15.05-1_amd64.deb ; \
+    sudo dpkg -i nasm_2.15.05-1_amd64.deb ;\
+    wget https://www.openssl.org/source/openssl-1.1.1k.tar.gz ;\
+    tar xf openssl-1.1.1k.tar.gz; \
+    cd openssl-1.1.1k; \
+    ./config --prefix=/opt/openssl/1.1.1k --openssldir=/opt/openssl/1.1.1k; \
+    make -j ;\
+    sudo make install
+
+ENV PATH=/opt/openssl/1.1.1k/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/openssl/1.1.1k/lib:/opt/crypto_mb/lib:/opt/ipsec-mb/0.55/lib
 
 # Build/Install IPP cyrypto library for the multi-buffer support
-WORKDIR /home/${USERNAME}/temp
+WORKDIR /home/${USERNAME}/
 RUN git clone --depth 1 -b $IPP_CRYPTO_TAG https://github.com/intel/ipp-crypto.git && \
+    export OPENSSL_ROOT_DIR=/opt/openssl/1.1.1k/ && \
     cd ipp-crypto && \
     cd sources/ippcp/crypto_mb && \
-    CXX=g++-10 CC=gcc-10 cmake . -B./build -DOPENSSL_INCLUDE_DIR=/home/${USERNAME}/openssl_install/include/ -DOPENSSL_LIBRARIES=/home/${USERNAME}/openssl_install/ -DOPENSSL_ROOT_DIR=/home/${USERNAME}/temp/openssl/ && \
+    cmake . -Bbuild -DCMAKE_INSTALL_PREFIX=/opt/crypto_mb && \
     cd build && \
     make -j && \
-    mkdir -p /home/${USERNAME}/crypto_mb/lib && \
-    ln -s /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/build/bin/libcrypto_mb.so /home/${USERNAME}/crypto_mb/lib/ && \
-    ln -s /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/include /home/${USERNAME}/crypto_mb/include
+    sudo make install
 
 # Build/install IPSec_MB library
-WORKDIR /home/${USERNAME}/temp
-RUN rm -rf ipsec intel-ipsec-mb && \
+RUN sudo rm -rf ipsec intel-ipsec-mb && \
     mkdir ipsec && \
     git clone --depth 1 -b $IPSEC_MB_TAG https://github.com/intel/intel-ipsec-mb.git && \
     cd intel-ipsec-mb/ && \
-    make -j && \
-    make install PREFIX=/home/${USERNAME}/temp/ipsec
+    make -j SAFE_DATA=y SAFE_PARAM=y SAFE_LOOKUP=y && \
+    sudo make install NOLDCONFIG=y PREFIX=/opt/ipsec-mb/0.55
 
 # Build/Install QAT engine 
-WORKDIR /home/${USERNAME}/temp
+WORKDIR /home/${USERNAME}/
+ARG HOME="/home/base"
 RUN git clone --depth 1 -b $QAT_ENGINE_TAG https://github.com/intel/QAT_Engine.git qat_engine && \
     cd qat_engine && \
     ./autogen.sh && \
-    ./configure \
-        --enable-qat_sw \
-        --enable-multibuff_offload \
-        --enable-ipsec_offload \
-        --with-ipsec_install_dir=/home/${USERNAME}/temp/ipsec \
-        --with-multibuff_install_dir=/home/${USERNAME}/crypto_mb \
-        --with-openssl_install_dir=/home/${USERNAME}/openssl_install && \
+    LDFLAGS="-L/opt/ipsec-mb/0.55/lib -L/opt/crypto_mb/lib" CPPFLAGS="-I/opt/ipsec-mb/0.55/include -I/opt/crypto_mb/include" \
+    ./configure --enable-qat_sw --prefix=/opt/openssl/1.1.1k --with-openssl_install_dir=/opt/openssl/1.1.1k --with-openssl_dir=$HOME/openssl-1.1.1k && \
+    PERL5LIB=$HOME/openssl-1.1.1k make -j && \
+    sudo PERL5LIB=$HOME/openssl-1.1.1k make install
+
+ARG ASYNCH_NGINX_TAG
+# Build/Install AYNCH NGINX, with QAT
+WORKDIR /home/${USERNAME}/nginx_build
+RUN rm -rf nginx && \
+    git clone --depth 1 -b $ASYNCH_NGINX_TAG https://github.com/intel/asynch_mode_nginx.git nginx && \
+    cd nginx && \
+    ./configure --prefix=/usr/ \
+        --with-http_ssl_module --add-dynamic-module=modules/nginx_qat_module \
+        --with-cc-opt="-DNGX_SECURE_MEM \
+        -I /opt/openssl/1.1.1k/include \
+        -Wno-error=deprecated-declarations -Wimplicit-fallthrough=0" \
+        --with-ld-opt="-Wl,-rpath=/opt/openssl/1.1.1k/lib \
+        -L /opt/openssl/1.1.1k/lib" && \
     make -j && \
-    make install
+    sudo make install && \
+    rm -rf /home/${USERNAME}/nginx_build
 
-
-WORKDIR /home/${USERNAME}/oss-performance
-
-RUN cp /home/${USERNAME}/temp/ipp-crypto/sources/ippcp/crypto_mb/build/bin/libcrypto_mb.so.11.1 /usr/lib/libcrypto_mb.so.11
+RUN sudo cp /opt/ipsec-mb/0.55/lib/*.* /usr/lib/
+RUN sudo cp /opt/crypto_mb/lib/libcrypto_mb.so.11.1 /usr/lib/libcrypto_mb.so.11
 COPY --chown=${USERNAME}:root files/nginx.conf.in /home/${USERNAME}/oss-performance/conf/nginx
 COPY --chown=${USERNAME}:root files/php-opt.ini /home/${USERNAME}/oss-performance/conf/php.ini
+
+WORKDIR /home/${USERNAME}/oss-performance
 USER ${USERNAME}

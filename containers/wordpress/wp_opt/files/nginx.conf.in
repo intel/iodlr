@@ -1,4 +1,4 @@
-worker_processes  96; # Depends on #vcpus
+worker_processes  28; # Depends on #vcpus
 
 load_module /usr/modules/ngx_ssl_engine_qat_module.so;
 
