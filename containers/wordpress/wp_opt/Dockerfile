@@ -217,8 +217,8 @@ RUN git clone --depth 1 -b $QAT_ENGINE_TAG https://github.com/intel/QAT_Engine.g
 
 ARG ASYNCH_NGINX_TAG
 # Build/Install AYNCH NGINX, with QAT
-WORKDIR /home/${USERNAME}/nginx_build
-RUN rm -rf nginx && \
+RUN mkdir /home/${USERNAME}/nginx_build && \
+    cd /home/${USERNAME}/nginx_build && \
     git clone --depth 1 -b $ASYNCH_NGINX_TAG https://github.com/intel/asynch_mode_nginx.git nginx && \
     cd nginx && \
     ./configure --prefix=/usr/ \
