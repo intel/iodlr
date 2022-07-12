@@ -21,4 +21,5 @@
 # OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # SPDX-License-Identifier: MIT
+sudo service mysql start
 php perf.php --php=/home/base/oss-performance/php-fpm --wordpress --i-am-not-benchmarking --siege=/usr/local/bin/siege $@
