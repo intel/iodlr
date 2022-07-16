@@ -22,65 +22,39 @@
 # SPDX-License-Identifier: MIT
 version: "3.3"
 services:
-  wp4.2_php7.4_base_querycacheoff_http:
-    build: 
-      context: ./wp_base/http
-      dockerfile: Dockerfile
-    image: wp4.2_php7.4_base_querycacheoff_http
-  wp4.2_php7.4_base_querycacheoff_https:
+
+  wp4.2_php7.4_base_https:
     build:
-      context: ./wp_base/https
+      context: ./wp_base
       dockerfile: Dockerfile
       args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-    image: wp4.2_php7.4_base_querycacheoff_https
-  wp4.2_php7.4_opt_querycacheon_http:
+        PHP_VER: 7.4.29
+        wordpressversion: 4.2
+    image: wp4.2_php7.4_base_https
+
+  wp4.2_php7.4_opt_https:
     build:
-      context: ./wp_opt/http
+      context: ./wp_opt
       dockerfile: Dockerfile
       args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-    image: wp4.2_php7.4_opt_querycacheon_http
-  wp4.2_php7.4_opt_querycacheon_with_https:
+        PHP_VER: 7.4.29
+        baseimage: wp4.2_php7.4_base_https
+    image: wp4.2_php7.4_opt_https
+
+  wp5.6_php8.0_base_https:
     build:
-      context: ./wp_base/https
+      context: ./wp_base
       dockerfile: Dockerfile
       args:
-          baseimage: wp4.2_php7.4_opt_querycacheon_http
-    image: wp4.2_php7.4_opt_querycacheon_httpbolt_with_https
-  wp4.2_php7.4_opt_querycache_on_https_opt:
+        PHP_VER: 8.0.18
+        wordpressversion: 5.6
+    image: wp5.6_php8.0_base_https
+
+  wp5.6_php8.0_opt_https:
     build:
-      context: ./wp_opt/https
+      context: ./wp_opt
       dockerfile: Dockerfile
       args:
-          baseimage: wp4.2_php7.4_opt_querycacheon_httpbolt_with_https
-    image: wp4.2_php7.4_opt_querycacheon_https_opt
-  wp4.2_php7.4_opt_querycacheoff_1_instance_only_http:
-    build:
-      context: ./wp_opt/http
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-          mariadbconf: 2s
-    image: wp4.2_php7.4_opt_querycacheoff_1_instance_only_http
-  wp5.2_php7.4_base_querycacheoff_http:
-    build: 
-      context: ./wp5.2_base/http
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_base_querycacheoff_http
-    image: wp5.2_php7.4_base_querycacheoff_http
-  wp5.2_php7.4_opt_querycacheon_http:
-    build: 
-      context: ./wp5.2_opt/http
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_opt_querycacheon_http
-    image: wp5.2_php7.4_opt_querycacheon_http
-  wp5.2_php7.4_opt_querycacheoff_1_instance_only_http:
-    build: 
-      context: ./wp5.2_opt/http
-      dockerfile: Dockerfile
-      args:
-          baseimage: wp4.2_php7.4_opt_querycacheoff_1_instance_only_http
-    image: wp5.2_php7.4_opt_querycacheoff_1_instance_only_http
+        PHP_VER: 8.0.18
+        baseimage: wp5.6_php8.0_base_https
+    image: wp5.6_php8.0_opt_https

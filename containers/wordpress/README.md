@@ -19,21 +19,28 @@ https://opensource.org/licenses/MIT
 
 ## Containers
 
-To accomplish this goal, we have built four containers: wp_base, wp_opt, wp5.2_base, and wp5.2_opt.
+To accomplish this goal, we have built four containers: wp4.2_php7.4_base, wp4.2_php7.4_opt, wp5.6_php8.0_base, wp5.6_php8.0_opt.
 
-* wp4.2_php7.4_base_querycacheoff_http contains the bare minimum needed to execute WordPress 4.2 / PHP7.4 and establish
+* wp4.2_php7.4_base_https contains the bare minimum needed to execute WordPress4.2 / PHP7.4 and establish
 a baseline. The following modifications were made to wp_base in addition to containerization:
   * php-fpm7.4
-* wp4.2_php7.4_opt_querycacheon_http builds upon wp4.2_php7.4_base_querycacheoff_http and has the following additions
+* wp4.2_php7.4_opt_https builds upon wp4.2_php7.4_base_https and has the following additions
   * BOLTing of PHP
+  * Intel QAT accelerator with SW mode for TLS
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)
     * Note that for NUMA optimization/pinning you may do this with the base container if you wish to isolate this optimization.
-* wp4.2_php7.4_opt_querycacheoff_1_instance_only_http builds upon wp4.2_php7.4_opt_querycacheon_http but with query_cache disabled instead.  It is intended to be run as a single container only.
-* wp5.2_php7.4_base_querycacheoff_http builds upon wp4.2_php7.4_base_querycacheoff_http, but uses WordPress 5.2 and its associated database dump and URLs.  
-* wp5.2_php7.4_opt_querycacheon_http builds upon wp4.2_php7.4_opt_querycacheon_http, but uses WordPress 5.2 and its associated database dump and URLs.  
-* wp5.2_php7.4_opt_querycacheoff_1_instance_only_http builds upon wp4.2_php7.4_opt_querycacheon_http, but uses WordPress 5.2 and its associated database dump and URLs, and with query_cache disabled. It is intended to be run as a single container only. 
+    
+* wp5.6_php8.0_base_https contains the bare minimum needed to execute WordPress5.6 / PHP8.0.
+* wp5.6_php8.0_opt_https builds upon wp5.6_php8.0_base_https and has the following additions
+  * PHP JIT
+  * BOLTing of PHP
+  * Intel QAT accelerator with SW mode for TLS
+  * PHP Zend framework now uses large pages
+  * MariaDB now uses large pages and additional tuning
+  * NUMA optimization/multi instance (must be done via pinning, see below)
+    * Note that for NUMA optimization/pinning you may do this with the base container if you wish to isolate this optimization.  
 
 Note that in order to run a baseline across multiple sockets, you will need to utilize the 1s-bkm.js file in the base user
 directory in the container you wish to run (likely base).  Copy the file over the current my.cnf as shown in the dockerfile.
@@ -50,23 +57,35 @@ sudo apt install docker.io
 sudo apt install docker-compose
 ```
 
-To build, you may use docker-compose:
+To build all containers, you may use docker-compose:
 
 ```
-sudo docker-compose build
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build \
+  --progress=plain
 ```
+
+To build a single container, you may use docker-compose as following example:
+
+```
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build \
+  --progress=plain \ 
+  wp4.2_php7.4_base_https
+```
+
 
 To see an image list after this you may run:
 
 ```
-sudo docker image ls
+docker image ls
 ```
 
 Example output:
 
 ```
-wp4.2_php7.4_opt_querycacheon_http          latest              3b250734600c        2 minutes ago       1.66GB
-wp4.2_php7.4_base_querycacheoff_http        latest              56decbd76dc6        3 minutes ago       1.62GB
+wp5.6_php8.0_opt_https                                                    latest                             042f6b6f5e67   About a minute ago   1.76GB
+wp5.6_php8.0_base_https                                                   latest                             ac13b8af0a6a   10 minutes ago       1.09GB
+wp4.2_php7.4_opt_https                                                    latest                             c7362eb36dac   16 minutes ago       1.74GB
+wp4.2_php7.4_base_https                                                   latest                             2a88d5f6a925   25 minutes ago       1.08GB
 ```
 
 ## Executing the workload
@@ -74,7 +93,7 @@ wp4.2_php7.4_base_querycacheoff_http        latest              56decbd76dc6    
 To execute the workload, first start a container (for NUMA gains, see section below instead):
 
 ```
-sudo docker run -it --privileged wp_opt_http
+sudo docker run -it --privileged wp4.2_php7.4_opt_https
 ```
 
 Now inside the container you may run:
@@ -99,18 +118,18 @@ An alternative way to execute the workload is use run.sh script, which will laun
 calculate the total TPS (transactions per second).
 Below example shows it run 6 instances of wp_base_http image with NUMA pinning.
 ```
-$ ./run.sh --image wp_base_http --count 6 --numa-pinning
+$ ./run.sh --image wp4.2_php7.4_opt_https --count 8 --numa-pinning
 -------------------------------------------------------------
 Creating temporary directory /tmp/run-DHzZTK85da for logfile.
 
 -------------------------------------------------------------
-Running 6 wp_base_http instance(s) with NUMA pinning.
+Running 8 wp4.2_php7.4_opt_https instance(s) with NUMA pinning.
 ...
 -------------------------------------------------------------
 All instances are completed.
 -------------------------------------------------------------
-TPS of 6 instances: 651.84 674.47 658.42 658.87 683.32 682.32
-Total TPS: 4009.24
+TPS of 8 instances: 791.3 786.65 787.78 787.33 791.65 788.88 783.91 786.39
+Total TPS: 6303.89
 ```
 
 ## Known issues
@@ -125,6 +144,16 @@ You may also refer to this example to get up and running:
 sudo -E docker-compose build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=$no_proxy
 ```
 Note this assumes your environment variables are properly set for your network.
+
+### Siege Lifting hang
+
+Siege has an known issue: https://github.com/JoeDog/siege/issues/66
+
+You may meet Siege lifting hang during test
+```
+Lifting the server siege...
+```
+Note you can reduce your concurency number to lower this reproduce rate.
 
 #### Apparmor
 

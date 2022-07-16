@@ -1,0 +1,39 @@
+From abba541faa88e2ed9021427fa1e7014e93c5de89 Mon Sep 17 00:00:00 2001
+From: Ping Zhao <ping.zhao@intel.com>
+Date: Sun, 1 May 2022 23:39:17 -0700
+Subject: [PATCH] BOLT requires adding GCC option
+ "-fno-reorder-blocks-and-partition". In some codes, it will be omitted
+ because "GCC push_options". This patch is to handle this case correctly.
+
+---
+ Zend/zend_vm_execute.h | 1 +
+ ext/standard/crc32.c   | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/Zend/zend_vm_execute.h b/Zend/zend_vm_execute.h
+index 922ed92e56..628da2cac3 100644
+--- a/Zend/zend_vm_execute.h
++++ b/Zend/zend_vm_execute.h
+@@ -51085,6 +51085,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_NULL_HANDLER(ZEND_OPCODE_HANDL
+ # pragma GCC push_options
+ # pragma GCC optimize("no-gcse")
+ # pragma GCC optimize("no-ivopts")
++# pragma GCC optimize("no-reorder-blocks-and-partition")
+ #endif
+ ZEND_API void execute_ex(zend_execute_data *ex)
+ {
+diff --git a/ext/standard/crc32.c b/ext/standard/crc32.c
+index cca5917438..651e83fa31 100644
+--- a/ext/standard/crc32.c
++++ b/ext/standard/crc32.c
+@@ -53,6 +53,7 @@ static inline int has_crc32_insn() {
+ # if defined(__GNUC__) && !defined(__clang__)
+ #  pragma GCC push_options
+ #  pragma GCC target ("+nothing+crc")
++#  pragma GCC optimize("no-reorder-blocks-and-partition")
+ # endif
+ static uint32_t crc32_aarch64(uint32_t crc, char *p, size_t nr) {
+ 	while (nr >= sizeof(uint64_t)) {
+-- 
+2.25.1
+

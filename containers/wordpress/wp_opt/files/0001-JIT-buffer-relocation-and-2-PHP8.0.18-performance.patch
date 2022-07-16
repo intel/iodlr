@@ -1,0 +1,94 @@
+From f2ec300360b3b3cfe06fa62e248bcfe8d9311191 Mon Sep 17 00:00:00 2001
+From: wxue1 <xue1.wang@intel.com>
+Date: Sun, 29 May 2022 23:29:59 -0700
+Subject: [PATCH] JIT buffer relocation and 2% PHP8.0.18 performance
+
+This is a JIT buffer relocation experiment inspired by this blog
+https://v8.dev/blog/short-builtin-calls
+  For 64-bit applications, branch prediction performance can be
+  negatively impacted when the target of a branch is more than
+  4 GB away from the branch.
+
+We set up a big 500MB char array which is close to PHP .text segment
+and use it as our own JIT buffer (originally allocated by opcache.so).
+
+In our benchmark, we found PHP interpreter archieved 2% performance
+and much better branching performance.
+
+Signed-off-by: Tony <tao.su@intel.com>
+Signed-off-by: Xue Wang <xue1.wang@intel.com>
+---
+ Zend/zend.c                     | 27 +++++++++++++++++++++++++++
+ Zend/zend.h                     |  1 +
+ ext/opcache/zend_shared_alloc.c |  5 ++++-
+ 3 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/Zend/zend.c b/Zend/zend.c
+index 20e4c78642..5ae1e2724a 100644
+--- a/Zend/zend.c
++++ b/Zend/zend.c
+@@ -35,6 +35,33 @@
+ #include "zend_attributes.h"
+ #include "zend_observer.h"
+ 
++#include <sys/mman.h>
++# ifdef MAP_ALIGNED_SUPER
++#    define MAP_HUGETLB MAP_ALIGNED_SUPER
++# endif
++
++#define BUF_SIZE 500*1024*1024
++char my_jit_buffer[BUF_SIZE+2*1024*1024]  __attribute__((section(".buffer"), aligned (4096)));
++
++ZEND_API char* zend_get_jit_buffer()
++{
++    void *p = MAP_FAILED;
++#  ifdef MAP_HUGETLB
++    long unsigned int huge_page_size = 2 * 1024 * 1024;
++	char* p_2M = (void*)(ZEND_MM_ALIGNED_SIZE_EX((ptrdiff_t)my_jit_buffer, huge_page_size));
++    p = mmap(p_2M, BUF_SIZE,
++            PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_FIXED|MAP_SHARED|MAP_HUGETLB, -1, 0);
++#  endif
++    if (p == MAP_FAILED) {
++        fprintf(stderr, "Failed to mmap() JIT buffer into huge pages, so fall back to 4KB page allocation\n");
++        p = mmap(my_jit_buffer, BUF_SIZE,
++            PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_FIXED|MAP_SHARED, -1, 0);
++        ZEND_ASSERT(p != MAP_FAILED);
++    }
++    return p;
++}
++
++
+ static size_t global_map_ptr_last = 0;
+ 
+ #ifdef ZTS
+diff --git a/Zend/zend.h b/Zend/zend.h
+index ac67115c6e..cf463dae1f 100644
+--- a/Zend/zend.h
++++ b/Zend/zend.h
+@@ -266,6 +266,7 @@ ZEND_API void zend_post_deactivate_modules(void);
+ 
+ ZEND_API void free_estring(char **str_p);
+ 
++ZEND_API char* zend_get_jit_buffer();
+ END_EXTERN_C()
+ 
+ /* output support */
+diff --git a/ext/opcache/zend_shared_alloc.c b/ext/opcache/zend_shared_alloc.c
+index d32a70b7e8..3189e004c8 100644
+--- a/ext/opcache/zend_shared_alloc.c
++++ b/ext/opcache/zend_shared_alloc.c
+@@ -260,7 +260,10 @@ int zend_shared_alloc_startup(size_t requested_size, size_t reserved_size)
+ 		i = ZSMMG(shared_segments_count) - 1;
+ 		if (ZSMMG(shared_segments)[i]->size - ZSMMG(shared_segments)[i]->pos >= reserved_size) {
+ 			ZSMMG(shared_segments)[i]->end = ZSMMG(shared_segments)[i]->size - reserved_size;
+-			ZSMMG(reserved) = (char*)ZSMMG(shared_segments)[i]->p + ZSMMG(shared_segments)[i]->end;
++			//ZSMMG(reserved) = (char*)ZSMMG(shared_segments)[i]->p + ZSMMG(shared_segments)[i]->end;
++            // Just for experiment - use our own JIT buffer which is close to PHP .text segment.
++            char* p = zend_get_jit_buffer();
++            ZSMMG(reserved) = (void*) p;
+ 			ZSMMG(reserved_size) = reserved_size;
+ 		} else {
+ 			zend_accel_error(ACCEL_LOG_FATAL, "Insufficient shared memory!");
+-- 
+2.25.1
+
