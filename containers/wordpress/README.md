@@ -1,16 +1,16 @@
-# Containerized oss-performance: wordpress workload
+# Containerized oss-performance: WordPress workload
 
 ## About
 
 This project is intended to be used to execute, in a containerized environment,
-the 'wordpress' target of the oss-performance benchmark suite, with updates from Intel(R).
+the 'WordPress' target of the oss-performance benchmark suite, with updates from Intel(R).
 
 The oss-performance benchmark suite with Intel(R) updates can be found here:
 [Updates for OSS Performance at github](https://github.com/intel/Updates-for-OSS-Performance)
 
 ## License
 
-The Intel(R) Container for oss-performance with Optimizations for Wordpress is distributed under the MIT License.
+The Intel(R) Container for oss-performance with Optimizations for WordPress is distributed under the MIT License.
 
 You may obtain a copy of the License at:
 
@@ -24,19 +24,19 @@ To accomplish this goal, we have built four containers: wp4.2_php7.4_base, wp4.2
 * wp4.2_php7.4_base_https contains the bare minimum needed to execute WordPress4.2 / PHP7.4 and establish
 a baseline. The following modifications were made to wp_base in addition to containerization:
   * php-fpm7.4
-* wp4.2_php7.4_opt_https builds upon wp4.2_php7.4_base_https and has the following additions
+* wp4.2_php7.4_opt_https builds upon wp4.2_php7.4_base_https and has the following additions:
   * BOLTing of PHP
-  * Intel QAT accelerator with SW mode for TLS
+  * Intel QAT accelerator with SW mode for TLS1.3
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)
     * Note that for NUMA optimization/pinning you may do this with the base container if you wish to isolate this optimization.
     
 * wp5.6_php8.0_base_https contains the bare minimum needed to execute WordPress5.6 / PHP8.0.
-* wp5.6_php8.0_opt_https builds upon wp5.6_php8.0_base_https and has the following additions
+* wp5.6_php8.0_opt_https builds upon wp5.6_php8.0_base_https and has the following additions:
   * PHP JIT
   * BOLTing of PHP
-  * Intel QAT accelerator with SW mode for TLS
+  * Intel QAT accelerator with SW mode for TLS1.3
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)
@@ -46,7 +46,7 @@ Note that in order to run a baseline across multiple sockets, you will need to u
 directory in the container you wish to run (likely base).  Copy the file over the current my.cnf as shown in the dockerfile.
 This will disable mysql query cache for an appropriate baseline across multiple sockets.
 
-## Building
+## How to build
 
 ### Pre-requisites
 
@@ -88,12 +88,12 @@ wp4.2_php7.4_opt_https                                                    latest
 wp4.2_php7.4_base_https                                                   latest                             2a88d5f6a925   25 minutes ago       1.08GB
 ```
 
-## Executing the workload
+## How to executing the workload
 
 To execute the workload, first start a container (for NUMA gains, see section below instead):
 
 ```
-sudo docker run -it --privileged wp4.2_php7.4_opt_https
+docker run -it --privileged wp4.2_php7.4_opt_https
 ```
 
 Now inside the container you may run:
@@ -108,7 +108,7 @@ To take advantage of multiple instances with respect to NUMA optimizations, run
 ```
 lscpu
 ```
-The command will list lcpu ids corresponding to cores on each NUMA node.
+The command will list cpu ids corresponding to cores on each NUMA node.
 Then you must use cpuset-cpus and cpuset-mems flags in docker run to ensure each
 instance is running on a single NUMA node.
 
@@ -116,7 +116,7 @@ instance is running on a single NUMA node.
 
 An alternative way to execute the workload is use run.sh script, which will launch the workload and
 calculate the total TPS (transactions per second).
-Below example shows it run 6 instances of wp_base_http image with NUMA pinning.
+Below example shows it runs 8 instances of wp_base_http image with NUMA pinning.
 ```
 $ ./run.sh --image wp4.2_php7.4_opt_https --count 8 --numa-pinning
 -------------------------------------------------------------
@@ -141,19 +141,18 @@ If you are building a docker image behind a corporate proxy, please see instruct
 
 You may also refer to this example to get up and running:
 ```
-sudo -E docker-compose build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=$no_proxy
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=$no_proxy
 ```
 Note this assumes your environment variables are properly set for your network.
 
 ### Siege Lifting hang
 
-Siege has an known issue: https://github.com/JoeDog/siege/issues/66
+Siege has a known issue: https://github.com/JoeDog/siege/issues/66
 
 You may meet Siege lifting hang during test
 ```
 Lifting the server siege...
 ```
-Note you can reduce your concurency number to lower this reproduce rate.
 
 #### Apparmor
 
