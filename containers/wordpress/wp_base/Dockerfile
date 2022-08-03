@@ -23,7 +23,7 @@
 ARG PHP_VER
 ARG INSTALL_DIR="/pkg_install"
 ARG OPENSSL_TAG=OpenSSL_1_1_1f
-ARG SIEGE_VERSION='siege-2.78'
+ARG SIEGE_VERSION='siege-4.1.5'
 ARG ASYNCH_NGINX_TAG='v0.4.7'
 
 
@@ -123,9 +123,7 @@ RUN cd /home/${USERNAME}; \
     wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
     tar zxf ${SIEGE_VERSION}.tar.gz
 WORKDIR /home/${USERNAME}/${SIEGE_VERSION}
-RUN ./utils/bootstrap && \
-    automake --add-missing && \
-    ./configure --with-ssl=/usr/bin/openssl  && \
+RUN ./configure --with-ssl=/usr/bin/openssl  && \
     make -j && \
     sudo make uninstall && \
     mkdir -p $INSTALL_DIR/usr/local/etc && \
