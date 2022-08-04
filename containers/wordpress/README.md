@@ -19,14 +19,14 @@ https://opensource.org/licenses/MIT
 
 ## Containers
 
-To accomplish this goal, we have built four containers: wp4.2_php7.4_base, wp4.2_php7.4_opt, wp5.6_php8.0_base, wp5.6_php8.0_opt.
+To accomplish this goal, we built four https workload containers: wp4.2_php7.4_base_https, wp4.2_php7.4_opt_https, wp5.6_php8.0_base_https, wp5.6_php8.0_opt_https.
 
 * wp4.2_php7.4_base_https contains the bare minimum needed to execute WordPress4.2 / PHP7.4 and establish
 a baseline. The following modifications were made to wp_base in addition to containerization:
   * php-fpm7.4
 * wp4.2_php7.4_opt_https builds upon wp4.2_php7.4_base_https and has the following additions:
   * BOLTing of PHP
-  * Intel QAT accelerator with SW mode for TLS1.3
+  * Intel QAT accelerator with SW mode for TLS1.3 (QAT requirement refer to: https://github.com/intel/QAT_Engine/blob/master/docs/hardware_requirements.md)
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)
@@ -36,7 +36,7 @@ a baseline. The following modifications were made to wp_base in addition to cont
 * wp5.6_php8.0_opt_https builds upon wp5.6_php8.0_base_https and has the following additions:
   * PHP JIT
   * BOLTing of PHP
-  * Intel QAT accelerator with SW mode for TLS1.3
+  * Intel QAT accelerator with SW mode for TLS1.3 (QAT requirement refer to: https://github.com/intel/QAT_Engine/blob/master/docs/hardware_requirements.md)
   * PHP Zend framework now uses large pages
   * MariaDB now uses large pages and additional tuning
   * NUMA optimization/multi instance (must be done via pinning, see below)

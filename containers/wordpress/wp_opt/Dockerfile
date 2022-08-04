@@ -31,10 +31,8 @@ RUN apt-get update; \
 
 WORKDIR /usr/src/php 
 COPY files/0001-BOLT-PHP${PHP_VER}-GCC-option.patch ./
-COPY files/0001-JIT-buffer-relocation-and-2-PHP${PHP_VER}-performance.patch ./
 RUN docker-php-source extract; \
   patch -p1 < 0001-BOLT-PHP${PHP_VER}-GCC-option.patch; \
-#  patch -p1 < 0001-JIT-buffer-relocation-and-2-PHP${PHP_VER}-performance.patch; \
   ./configure \
   --enable-fpm \
   --with-mysqli \
