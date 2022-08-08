@@ -145,15 +145,6 @@ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build --build-arg ht
 ```
 Note this assumes your environment variables are properly set for your network.
 
-### Siege Lifting hang
-
-Siege has a known issue: https://github.com/JoeDog/siege/issues/66
-
-You may meet Siege lifting hang during test
-```
-Lifting the server siege...
-```
-
 #### Apparmor
 
 There are instances where apparmor may cause mariadb to not start, particularly when mysql is installed on the host system running apparmor.
