@@ -118,7 +118,7 @@ RUN git clone --depth 1 -b $OPENSSL_TAG https://github.com/openssl/openssl.git &
 
 
 # build siege with ssl, Uninstall & Reinstall
-# Build and install siege 2.78
+# Build and install siege 4.1.5.
 RUN cd /home/${USERNAME}; \
     wget http://download.joedog.org/siege/${SIEGE_VERSION}.tar.gz && \
     tar zxf ${SIEGE_VERSION}.tar.gz
