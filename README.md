@@ -6,7 +6,7 @@ This repository offers tools and a reference implementations for
 optimizing dynamic language runtimes.
 
 Please refer to
-https://software.intel.com/en-us/articles/runtime-performance-optimization-blueprint-intel-architecture-optimization-with-large-code
+https://www.intel.com/content/www/us/en/developer/articles/technical/runtime-performance-optimization-blueprint-intel-architecture-optimization-with-large-code.html
 for a blueprint that demonstrates how to diagnose Instruction Translation Lookaside Buffer (I-TLB) stalls, and
 reduce them using large pages. 
 
