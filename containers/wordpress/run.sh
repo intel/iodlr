@@ -125,8 +125,8 @@ if [[ ${NUMA_PINNING} -eq 0 ]]; then
     echo "Running ${COUNT} ${IMAGE_NAME} instance(s)."
     echo ""
     for ((i = 0; i < ${COUNT}; i++)); do
-        container_id=$(sudo docker run -d --rm -ti --privileged ${IMAGE_NAME} bash -c "./quickrun.sh \"--php-fcgi-children ${worker_num}\"")
-        all_containers[$i]=$(sudo docker ps -q -f id=${container_id})
+        container_id=$(docker run -d --rm -ti --privileged ${IMAGE_NAME} bash -c "./quickrun.sh \"--php-fcgi-children ${worker_num}\"")
+        all_containers[$i]=$(docker ps -q -f id=${container_id})
     done
 else
     echo "-------------------------------------------------------------"
@@ -134,21 +134,21 @@ else
     echo ""
     get_cpu_pinning
     for ((i = 0; i < ${COUNT}; i++)); do
-        container_id=$(sudo docker run -d --rm -ti --privileged ${cpu_pinning_s[i]} ${IMAGE_NAME} bash -c "./quickrun.sh \"--php-fcgi-children ${worker_num}\"")
-        all_containers[$i]=$(sudo docker ps -q -f id=${container_id})
+        container_id=$(docker run -d --rm -ti --privileged ${cpu_pinning_s[i]} ${IMAGE_NAME} bash -c "./quickrun.sh \"--php-fcgi-children ${worker_num}\"")
+        all_containers[$i]=$(docker ps -q -f id=${container_id})
     done
 fi
 
 # Redirect containers output to logfile in temp directory
 for container_id in ${all_containers[@]}; do
-    sudo docker logs -f ${container_id} >${tmp_dir}/${container_id}.log &
+    docker logs -f ${container_id} >${tmp_dir}/${container_id}.log &
 done
 
 # Wait all container to be completed
 while true; do
     completed=0
     for container_id in ${all_containers[@]}; do
-        if [ "$(sudo docker ps -q -f id=${container_id})" ]; then
+        if [ "$(docker ps -q -f id=${container_id})" ]; then
             completed=1
             echo "Container ${container_id} = running"
         else
