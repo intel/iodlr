@@ -7,6 +7,8 @@
 #include <regex.h>
 #include "large_page.h"
 
+pid_t gettid(void);
+
 void printErr (map_status status, const char * lib) {
   fprintf(stderr,
     "Mapping to large pages failed for %s: %s\n", lib,
@@ -37,6 +39,7 @@ static int tryMapAllDSOs(struct dl_phdr_info* hdr, size_t size, void* data) {
 
 void __attribute__((constructor)) map_to_large_pages() {
   bool is_enabled = true;
+  fprintf(stderr, "TID: %d\n:", gettid());
   map_status status = IsLargePagesEnabled(&is_enabled);
   if (status != map_ok) goto fail;
 

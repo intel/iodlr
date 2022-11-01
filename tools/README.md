@@ -73,3 +73,45 @@ measure-perf-metrics.sh -h
 * Use it for real collection/analysis. 
 * Once it's ready, contribute it back to the project.
 
+# Generate Perf Map file
+
+When huge page is enabled and the .txt sections are mapped into it, Perf are no longer able to show the symbols. The /tmp/perf-[TID].map is needed for showing symbols correctly with Perf. The gen-perf-map.sh tool is offered to help generating perf-[TID].map file.
+
+## Usage
+```
+./gen-perf-map.sh LIB BASEADDRESS TID
+```
+* TID: thread ID
+* BASEADDRESS: beginning address of .txt section in huge page.
+
+If .txt sections are mapped into huge page with the large_page-c, you can find the TID and BASEADDRESS in the output of console.
+
+## Example
+
+In this example, we run node with a javascript file and use "liblppreload.so" to map .txt sections to huge page. Below is the shell script.
+```
+#!/usr/bin/bash
+
+LD_PRELOAD=/usr/lib64/liblppreload.so node helloworld.js
+```
+
+Then, the command "perf record [shell script]" is performed to record the profiling data. The following is the ouput of console. With it, we can know what TID is, which libarary has been mapped into huge page and its base address. For our example, TID is "8817", the "libnode.so.64" has been mapped into huge page and its base address is "7f36633c3000".
+```
+TID: 8817
+:Base address: 0.Mapping to large pages failed for static code: map region too small
+......
+Enabling large code pages for /usr/lib64/liblppreload.so Base address: 7f3664990000.
+Mapping to large pages failed for /usr/lib64/liblppreload.so: map region too small
+Enabling large code pages for /lib/x86_64-linux-gnu/libnode.so.64 Base address: 7f36633c3000. - success.
+Enabling large code pages for /lib/x86_64-linux-gnu/libpthread.so.0 Base address: 7f36633a0000.
+Mapping to large pages failed for /lib/x86_64-linux-gnu/libpthread.so.0: map region too small
+Enabling large code pages for /lib/x86_64-linux-gnu/libc.so.6 Base address: 7f36631ae000.
+......
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.245 MB perf.data (1881 samples) ]
+```
+
+Run "gen-perf-map.sh" to generate the perf map file under /tmp/:
+```
+./gen-perf-map.sh /lib/x86_64-linux-gnu/libnode.so.64 7f36633c3000 8817
+```
