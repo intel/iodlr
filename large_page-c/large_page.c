@@ -147,6 +147,7 @@ static int FindMapping(struct dl_phdr_info* hdr, size_t size, void* data) {
         }
       }
       find_params->start = hdr->dlpi_addr + text_section.sh_addr;
+      fprintf(stderr, "Base address: %lx.", hdr->dlpi_addr);
       find_params->end = find_params->start + text_section.sh_size;
       return 1;
     }
