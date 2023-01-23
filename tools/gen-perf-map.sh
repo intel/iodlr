@@ -5,7 +5,7 @@ if [ "$#" -lt 3 ]; then
     exit 1
 fi
 
-nm -DSC $1 | grep " [TVWu] " | awk '{$3=""; print$0}' > nm-output.txt
+nm -aSC $1 | grep " [TtVWu] " | awk '{$3=""; print$0}' > nm-output.txt
 
 ./maps_file.py $2
 
