@@ -79,8 +79,10 @@ When huge page is enabled and the .txt sections are mapped into it, Perf are no 
 
 ## Usage
 ```
-./gen-perf-map.sh LIB BASEADDRESS TID
+./gen-perf-map.sh -s|-b PATH BASEADDRESS TID
 ```
+* -s|-b: Pass -s if generating symbols for a dynamic library or -b if passing a binary
+* PATH: Path to the shared library or binary
 * TID: thread ID
 * BASEADDRESS: beginning address of .txt section in huge page.
 
@@ -113,5 +115,5 @@ Enabling large code pages for /lib/x86_64-linux-gnu/libc.so.6 Base address: 7f36
 
 Run "gen-perf-map.sh" to generate the perf map file under /tmp/:
 ```
-./gen-perf-map.sh /lib/x86_64-linux-gnu/libnode.so.64 7f36633c3000 8817
+./gen-perf-map.sh -s /lib/x86_64-linux-gnu/libnode.so.64 7f36633c3000 8817
 ```
