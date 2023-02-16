@@ -16,7 +16,7 @@ fi
 
 nm $NM_ARGS $2 | grep " [TtVWu] " | awk '{$3=""; print$0}' > nm-output.txt
 
-./maps_file.py $3
+$( dirname -- "$0"; )/maps_file.py $3
 
 cat ./tmp.map >> "/tmp/perf-$4.map"
 
