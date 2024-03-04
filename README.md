@@ -11,6 +11,11 @@ for a blueprint that demonstrates how to diagnose Instruction Translation Lookas
 reduce them using large pages. 
 
 
+## Status
+
+This codebase has been built and tested successfully on Ubuntu v22.04.1 LTS version as of Feb. 2024
+
+
 ## License
 
 The Intel&reg; Optimizations for Dynamic Language Runtimes is distributed under the MIT License.
