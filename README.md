@@ -38,3 +38,5 @@ Please submit an issue using native github.com interface: https://github.com/int
 
 Please refer to the [Contributing guide](CONTRIBUTING.md) for details on how to contribute
 to this project.
+
+Last update: 08/2024
