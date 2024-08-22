@@ -18,11 +18,8 @@ This codebase has been built and tested successfully on Ubuntu v22.04.1 LTS vers
 
 ## License
 
-The Intel&reg; Optimizations for Dynamic Language Runtimes is distributed under the MIT License.
+The Intel&reg; Optimizations for Dynamic Language Runtimes is distributed under the [MIT License](LICENSE).
 
-You may obtain a copy of the License at:
-
-https://opensource.org/licenses/MIT
 
 ## Tested Linux versions
 
